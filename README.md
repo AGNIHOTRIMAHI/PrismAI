@@ -260,30 +260,6 @@ prism-ai/
 ```
 
 ---
-
-## ⚙️ Troubleshooting
-
-### `ERR_CONNECTION_REFUSED` on `localhost:8000`
-Your backend isn't running. Start it with `python main.py`.
-
-### `RESOURCE_EXHAUSTED` / 429 from Gemini
-You've hit the free tier limit (20 requests/day for `gemini-2.5-flash`). Switch to `gemini-1.5-flash` in your `.env` or enable billing on [Google AI Studio](https://aistudio.google.com).
-
-### Model still using `gemini-2.5-flash` after changing `.env`
-The model name is hardcoded somewhere in your code. Run:
-```bash
-grep -r "gemini-2.5-flash" .
-```
-Replace with `os.getenv("GOOGLE_MODEL", "gemini-1.5-flash")` and ensure `load_dotenv()` is called **before** any model is initialized.
-
-### CRAG panel shows `N/A`
-Your graph nodes aren't returning `crag_relevance_score`, `crag_triggered_web_search`, or `retrieved_docs` in their state output. Add these fields to your aggregator node's return value.
-
-### Review output is empty
-Your nodes aren't populating `final_report_markdown`. The frontend will show a metadata summary as a fallback, but for a full report ensure your aggregator node returns a markdown string under that key.
-
----
-
 ## 🛠️ Tech Stack
 
 | Layer | Technology |
