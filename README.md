@@ -279,7 +279,3 @@ prism-ai/
   <sub>PrismAI — because every PR deserves a second pair of eyes</sub>
 </div>
 
-
-  <strong>Built with LangGraph · FastAPI · ❤️</strong><br/>
-  <sub>PrismAI — because every PR deserves a second pair of eyes</sub>
-</div>
