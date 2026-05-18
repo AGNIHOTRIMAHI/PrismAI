@@ -5,28 +5,141 @@ import time
 import threading
 import uvicorn
 import json
+import base64
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CSS (Must be first)
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="OpsSphere PR Console", page_icon="🛡️", layout="wide")
+st.set_page_config(page_title="PrismAI", page_icon="🟪", layout="wide")
 
-st.markdown("""
+if "light_mode" not in st.session_state:
+    st.session_state.light_mode = False
+
+# -----------------------------------------------------------------------------
+# 2. DYNAMIC CSS (Swaps based on toggle)
+# -----------------------------------------------------------------------------
+if st.session_state.light_mode:
+    # --- ☀️ LIGHT MODE PALETTE ---
+    bg_color = "#f7f2fc"          
+    text_color = "#401371"        
+    panel_bg = "#ffffff"          
+    border_color = "#cfa1ed"      
+    shadow_color = "rgba(157,78,221,0.2)"
+    title_color = "#552E7E"
+    btn_bg = "#7b2cbf"
+    btn_hover = "#9d4edd"
+else:
+    # --- 🌙 DARK MODE PALETTE ---
+    bg_color = "#080212"          
+    text_color = "#e4e4e7"        
+    panel_bg = "#250a47"          
+    border_color = "#54199c"      
+    shadow_color = "rgba(157,78,221,0.7)"
+    title_color = "#f4f4f5"
+    btn_bg = "#9d4edd"            
+    btn_hover = "#b5179e"
+
+# FIX: Added the 'f' right before the quotes so Python injects the color variables properly!
+st.markdown(f"""
 <style>
-    /* Ops Console Dark Theme Overrides */
-    .stApp { background-color: #09090b; color: #e4e4e7; }
-    h1, h2, h3 { color: #f4f4f5 !important; font-family: 'Courier New', monospace; }
-    .stTextInput>div>div>input { background-color: #18181b; color: #a1a1aa; border: 1px solid #27272a; }
-    .stSelectbox>div>div>div { background-color: #18181b; color: #a1a1aa; border: 1px solid #27272a; }
+    /* Import Fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Amita:wght@400;700&family=Italiana&family=Josefin+Sans:ital,wght@0,100..700;1,100..700&family=Kavoon&family=Lora:ital,wght@0,400..700;1,400..700&family=Merienda:wght@300..900&family=Merriweather:ital,opsz,wght@0,18..144,300..900;1,18..144,300..900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Roboto+Mono:ital,wght@0,100..700;1,100..700&family=Roboto:ital,wght@0,100..900;1,100..900&family=Satisfy&family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap');
     
-    /* Custom Badges */
-    .badge-running { background: rgba(59,130,246,0.1); color: #3b82f6; border: 1px solid #3b82f6; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; }
-    .badge-done { background: rgba(16,185,129,0.1); color: #10b981; border: 1px solid #10b981; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; }
-    .badge-hitl { background: rgba(245,158,11,0.1); color: #f59e0b; border: 1px solid #f59e0b; padding: 4px 8px; border-radius: 4px; font-weight: bold; font-family: monospace; }
+    .kavoon-title {{
+        font-family: 'Kavoon', cursive !important;
+        font-size: 2.5rem !important;
+        color: {title_color} !important;
+        line-height: 1 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        letter-spacing: 1px !important;
+        transition: color 0.3s ease;
+    }}
+
+    /* Global App Colors */
+    .stApp {{ background-color: {bg_color}; color: {text_color}; transition: background-color 0.3s ease; }}
+    h2, h3, p, span, div {{ color: {text_color} !important; }}
+    h2, h3 {{ font-family: 'Courier New', monospace; }}
     
+    /* Inputs & Selectboxes */
+   /* 1. Global Reset for ALL input container wrappers */
+    .stTextInput > div, 
+    div[data-baseweb="input"] ,
+    div[data-baseweb="base-input"] {{
+        background-color: {panel_bg} !important;
+        border: 1px solid {border_color} !important;
+        transition: all 0.2s ease-in-out !important;
+    }}
+
+    /* 2. Target the actual input text field */
+    .stTextInput>div>div>input {{ 
+        background-color: transparent !important; 
+        color: {text_color} !important; 
+        border: none !important; /* Removes internal extra borders */
+    }}
+    
+    .stSelectbox>div>div>div {{ 
+        background-color: {panel_bg} !important; 
+        color: {text_color} !important; 
+        border: 1px solid {border_color} !important; 
+    }}
+    
+    /* 3. FIX: Catch the parent container when focused from inside */
+    .stTextInput > div:focus-within,
+    div[data-baseweb="input"]:focus-within ,
+    div[data-baseweb="base-input"]:focus-within{{
+        border-color: #9d4edd !important; /* Force vibrant purple */
+        box-shadow:inset 0 0 10px {shadow_color}, 0 0 8px {shadow_color} !important; /* Glow effect */
+    }}
+
+    /* Remove Streamlit's secondary default outline entirely */
+    .stTextInput > div:focus-within input {{
+        outline: none !important;
+        border: none !important;
+        background-color: transparent !important;
+    }}
+    /* Custom Circular Theme Toggle Button */
+   button[kind="secondary"] {{
+        border-radius: 50% !important;
+        width: 48px !important;
+        height: 48px !important;
+        padding: 0 !important;
+        font-size: 1.6rem !important;
+        background-color: {panel_bg};
+        border: 2px solid {border_color};
+        color: {text_color};
+        float: right;
+        transition: all 0.3s ease;
+    }}
+    button[kind="secondary"]:hover {{
+        border-color: #9d4edd !important;
+        box-shadow: 0 0 10px {shadow_color} !important;
+    }}
+
+    /* Custom Primary Run Button Styling */
+    button[data-testid="stBaseButton-primary"] {{
+        background-color: {btn_bg} !important;
+        color: #ffffff !important;
+        border: none !important;
+        font-weight: bold !important;
+        transition: all 0.3s ease !important;
+    }}
+    
+    button[data-testid="stBaseButton-primary"]:hover {{
+        background-color: {btn_hover} !important;
+        box-shadow: 0 0 12px {shadow_color} !important;
+        transform: translateY(-1px);
+    }}
+    
+    button[data-testid="stBaseButton-primary"]:active {{
+        transform: translateY(1px);
+    }}
     /* Pipeline Step Box */
-    .pipe-step { background: #18181b; border: 1px solid #27272a; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-family: monospace; }
-    .pipe-active { border-color: #3b82f6; box-shadow: 0 0 8px rgba(59,130,246,0.3); }
+    .pipe-step {{ background: {panel_bg}; border: 1px solid {border_color}; padding: 10px; border-radius: 8px; margin-bottom: 8px; font-family: monospace; transition: all 0.3s ease; }}
+    .pipe-active {{ border-color: #9d4edd !important; box-shadow: 0 0 10px {shadow_color}; }}
+    
+    /* Adjust Streamlit Container Borders */
+    [data-testid="stVerticalBlockBorderWrapper"] {{ border-color: {border_color} !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -39,7 +152,7 @@ def start_backend():
 if "backend_started" not in st.session_state:
     threading.Thread(target=start_backend, daemon=True).start()
     st.session_state["backend_started"] = True
-    time.sleep(2) # Give the server a second to spin up
+    time.sleep(2) 
 
 BACKEND_URL = "http://localhost:8000"
 
@@ -56,8 +169,33 @@ if "graph_state" not in st.session_state:
 # -----------------------------------------------------------------------------
 # 4. UI HEADER & TRIGGER
 # -----------------------------------------------------------------------------
-st.title("🛡️ OpsSphere PR Console")
-st.markdown("`LangGraph v3` · `CRAG` · `HITL Multi-Agent`")
+try:
+    local_image_path = "assets/logo.jpeg"
+    with open(local_image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    logo_url = f"data:image/jpeg;base64,{encoded_string}" 
+except FileNotFoundError:
+    logo_url = "https://cdn-icons-png.flaticon.com/512/8618/8618881.png"
+
+head_col1, head_col2 = st.columns([15, 1])
+
+with head_col1:
+    st.markdown(f"""
+    <div style="display: flex; align-items: center; gap: 18px; margin-bottom: 10px;">
+        <img src="{logo_url}" width="65" style="border-radius: 12px; filter: drop-shadow(0 0 8px {shadow_color});">
+        <span class="kavoon-title">PrismAI</span>
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown("`LangGraph v3` · `CRAG` · `HITL Multi-Agent`")
+
+with head_col2:
+    # Custom Circular Toggle Switch Logic
+    # In dark mode, show a sun to switch to light mode. In light mode, show a moon.
+    toggle_icon = "🌙" if st.session_state.light_mode else "☀️"
+    
+    if st.button(toggle_icon, key="theme_toggle"):
+        st.session_state.light_mode = not st.session_state.light_mode
+        st.rerun()
 
 with st.container(border=True):
     col1, col2 = st.columns([4, 1])
@@ -65,7 +203,7 @@ with st.container(border=True):
         pr_url = st.text_input("GitHub PR URL", value="https://github.com/AGNIHOTRIMAHI/OpsSphere/pull/1", label_visibility="collapsed")
     with col2:
         if st.button("🚀 Run Graph", use_container_width=True, type="primary"):
-            st.session_state.thread_id = str(uuid.uuid4()) # Generate new thread for new run
+            st.session_state.thread_id = str(uuid.uuid4()) 
             
             with st.spinner("Triggering Pipeline..."):
                 try:
@@ -79,7 +217,7 @@ with st.container(border=True):
             st.rerun()
 
 # -----------------------------------------------------------------------------
-# 5. POLLING LOGIC (Syncs Streamlit with FastAPI)
+# 5. POLLING LOGIC
 # -----------------------------------------------------------------------------
 if st.session_state.is_polling:
     try:
@@ -88,11 +226,10 @@ if st.session_state.is_polling:
             data = res.json()
             st.session_state.graph_state = data
             
-            # Stop polling if we hit HITL or if the graph is completely done
             if data.get("waiting_for_human") or data.get("done"):
                 st.session_state.is_polling = False
             else:
-                time.sleep(2) # Wait 2 seconds before checking again
+                time.sleep(2) 
                 st.rerun()
     except Exception as e:
         st.error(f"Polling lost connection to server: {e}")
@@ -112,7 +249,6 @@ col_left, col_right = st.columns([1, 2])
 with col_left:
     st.markdown("### Pipeline State")
     
-    # Simple logic to light up steps based on what data exists in the state
     has_diff = "code_diff" in values
     has_sec = "security_feedback" in values
     has_crag = "crag_context" in values
@@ -132,7 +268,6 @@ with col_left:
 
 # --- RIGHT COLUMN: REPORTS & HITL DECISION CENTER ---
 with col_right:
-    # 1. Show the Decision Center if waiting for human
     if is_waiting:
         st.markdown("### 🚨 Decision Center")
         st.error("Pipeline Paused: Awaiting Senior Engineer authorization.")
@@ -147,7 +282,6 @@ with col_right:
                 if not reviewer:
                     st.warning("Reviewer ID is required.")
                 else:
-                    # Map the UI choice to the boolean expected by your FastAPI endpoint
                     is_approved = True if decision == "Approve Merge" else False
                     
                     try:
@@ -157,7 +291,7 @@ with col_right:
                         })
                         if post_res.status_code == 200:
                             st.success("Decision Transmitted! Resuming pipeline...")
-                            st.session_state.is_polling = True # Start watching the server again
+                            st.session_state.is_polling = True 
                             time.sleep(1)
                             st.rerun()
                         else:
@@ -165,7 +299,6 @@ with col_right:
                     except Exception as e:
                         st.error(f"API Error: {e}")
 
-    # 2. Show the Agent Reports
     st.markdown("### Agent Reports")
     if not values:
         st.info("Awaiting pipeline execution...")
