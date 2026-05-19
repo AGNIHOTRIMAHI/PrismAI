@@ -41,12 +41,13 @@ app.add_middleware(
 # -----------------------------------------------------------------------------
 # 0. GITHUB DIFF FETCHING & POSTING
 # -----------------------------------------------------------------------------
-def fetch_github_diff(pr_url: str) -> tuple[Optional[str], Optional[str]]:
+def fetch_github_diff(pr_url: str,token: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     clean_url = pr_url.strip().rstrip("/")
     if not clean_url.startswith("https://github.com/"):
         return None, "Invalid URL. Provide a valid GitHub Pull Request link."
-    if not GITHUB_TOKEN:
-        return None, "GITHUB_TOKEN not found in .env file."
+    active_token = token or GITHUB_TOKEN
+    if not active_token:
+        return None, "No GitHub token provided in UI and GITHUB_TOKEN not found in server env."
     try:
         parts     = clean_url.split("github.com/")[1].split("/")
         owner     = parts[0]
@@ -54,7 +55,7 @@ def fetch_github_diff(pr_url: str) -> tuple[Optional[str], Optional[str]]:
         pr_number = parts[3]
         api_url   = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
         headers   = {
-            "Authorization": f"token {GITHUB_TOKEN}",
+            "Authorization": f"token {active_token}",
             "Accept": "application/vnd.github.v3.diff",
         }
         log.info("Fetching diff: %s", api_url)
@@ -241,7 +242,7 @@ graph = workflow.compile(checkpointer=memory, interrupt_before=["post_review"])
 class ReviewRequest(BaseModel):
     pr_url:    str
     thread_id: str
-
+    github_token: Optional[str] = None
 
 class ApprovalRequest(BaseModel):
     thread_id: str
@@ -255,7 +256,7 @@ class ApprovalRequest(BaseModel):
 async def start_review(req: ReviewRequest):
     log.info("=== NEW REVIEW REQUEST  thread=%s  url=%s ===", req.thread_id, req.pr_url)
 
-    diff, error = fetch_github_diff(req.pr_url)
+    diff, error = fetch_github_diff(req.pr_url,req.github_token)
     if error:
         return {"error": error}
 
@@ -267,6 +268,7 @@ async def start_review(req: ReviewRequest):
         "pr_url":     req.pr_url,
         "pr_id":      "PR-LIVE",
         "repository": req.pr_url,
+        "github_token": req.github_token,
     }
 
     log.info("Invoking LangGraph pipeline with Gemini...")

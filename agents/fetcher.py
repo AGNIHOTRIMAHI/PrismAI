@@ -30,10 +30,11 @@ def fetcher_node(state: PRReviewState) -> PRReviewState:
     """
     settings = get_settings()
     pr_url = state["pr_url"]
-    log.info("fetcher_started", pr_url=pr_url)
+    user_token = state.get("github_token")
+    log.info("fetcher_started", pr_url=pr_url, using_custom_token=bool(user_token))
 
     try:
-        client = get_github_client()
+        client = get_github_client(token=user_token)
 
         # ── Step 1: Metadata ─────────────────────────────────────────────────
         metadata = client.fetch_pr_metadata(pr_url)

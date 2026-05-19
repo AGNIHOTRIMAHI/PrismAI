@@ -70,7 +70,8 @@ class PRReviewState(TypedDict, total=False):
     """
 
     # ── Input ─────────────────────────────────────────────────────────────────
-    pr_url: str                          # Canonical PR URL
+    pr_url: str     
+    github_token: Optional[str]                     # Canonical PR URL
     pr_metadata: PRMetadata              # Structured PR info
 
     # ── Fetched Content ───────────────────────────────────────────────────────

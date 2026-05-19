@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from typing import List, Optional
-
+import os
 import httpx
 from github import Github, GithubException
 from tenacity import (
@@ -49,9 +49,11 @@ class GitHubClient:
     Constructed once and re-used across the graph execution lifetime.
     """
 
-    def __init__(self) -> None:
+    def __init__(self,token:Optional[str] = None) -> None:
         settings = get_settings()
-        self._token = settings.github_token
+        self._token =token or settings.github_token
+        if not self._token:
+            raise ValueError("No GitHub token provided and no default found in settings.")
         self._gh = Github(self._token)
         self._http = httpx.Client(
             headers={
@@ -190,9 +192,15 @@ class GitHubClient:
 _client: Optional[GitHubClient] = None
 
 
-def get_github_client() -> GitHubClient:
-    """Return a module-level singleton GitHub client."""
-    global _client
-    if _client is None:
-        _client = GitHubClient()
-    return _client
+def get_github_client(token: str = None) -> GitHubClient:
+    #"""Return a module-level singleton GitHub client."""
+    #active_token = token or os.getenv("GITHUB_TOKEN")
+    #global _client
+    #if _client is None:
+    #    _client = GitHubClient()
+    #return _client
+    """
+    Return a GitHub client securely initialized with the provided token.
+    A new instance is created per call to prevent cross-user token leakage.
+    """
+    return GitHubClient(token=token)
