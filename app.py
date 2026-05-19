@@ -146,15 +146,19 @@ st.markdown(f"""
 # -----------------------------------------------------------------------------
 # 2. START FASTAPI IN BACKGROUND (Local Testing Trick)
 # -----------------------------------------------------------------------------
-def start_backend():
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, log_level="warning")
+#def start_backend():
+#    uvicorn.run("main:app", host="127.0.0.1", port=8000, log_level="warning")
 
-if "backend_started" not in st.session_state:
-    threading.Thread(target=start_backend, daemon=True).start()
-    st.session_state["backend_started"] = True
-    time.sleep(2) 
+#if "backend_started" not in st.session_state:
+#    threading.Thread(target=start_backend, daemon=True).start()
+#    st.session_state["backend_started"] = True
+#    time.sleep(2) 
 
-BACKEND_URL = "http://localhost:8000"
+#BACKEND_URL = "http://localhost:8000"
+# -----------------------------------------------------------------------------
+# 2. CONNECT TO CLOUD BACKEND
+# -----------------------------------------------------------------------------
+BACKEND_URL = "https://prismai-backend-nih2.onrender.com"
 
 # -----------------------------------------------------------------------------
 # 3. SESSION STATE MANAGEMENT
