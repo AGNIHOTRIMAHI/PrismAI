@@ -6,6 +6,10 @@ langchain-community>=0.2.0
 langchain-core>=0.2.0
 langchain-text-splitters>=0.2.0
 
+# ─── LangGraph Persistence (Required for HITL) ────────────────────────────────
+langgraph-checkpoint-sqlite>=1.0.0
+aiosqlite>=0.20.0
+
 # ─── Google Gemini ────────────────────────────────────────────────────────────
 google-generativeai>=0.7.0
 
@@ -15,12 +19,19 @@ uvicorn[standard]>=0.30.0
 pydantic>=2.7.0
 pydantic-settings>=2.3.0
 httpx>=0.27.0
+python-multipart>=0.0.9
+
+# ─── Frontend (If using a single repository) ──────────────────────────────────
+streamlit>=1.35.0
 
 # ─── GitHub Integration ───────────────────────────────────────────────────────
 PyGithub>=2.3.0
 
 # ─── RAG & Vector Store ───────────────────────────────────────────────────────
 faiss-cpu>=1.8.0
+aiohttp>=3.9.0               # Required for Langchain async web fetching
+beautifulsoup4>=4.12.0       # Required for Langchain HTML parsing
+tiktoken>=0.7.0              # Standard for token counting/chunking
 
 # ─── Web Search (CRAG) ────────────────────────────────────────────────────────
 tavily-python>=0.3.0
