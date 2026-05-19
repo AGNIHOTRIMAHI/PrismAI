@@ -204,14 +204,24 @@ with head_col2:
 with st.container(border=True):
     col1, col2 = st.columns([4, 1])
     with col1:
-        pr_url = st.text_input("GitHub PR URL", value="https://github.com/AGNIHOTRIMAHI/OpsSphere/pull/1", label_visibility="collapsed")
+        pr_url = st.text_input("GitHub PR URL", value="https://github.com/ABC/PrismAI/pull/1", label_visibility="collapsed")
+        # --- NEW: Added token input field ---
+        user_token = st.text_input("GitHub Token (Optional for Private Repos)", type="password", placeholder="ghp_...")
     with col2:
+        st.write("") # Adds a little spacing to align the button nicely
         if st.button("🚀 Run Graph", use_container_width=True, type="primary"):
             st.session_state.thread_id = str(uuid.uuid4()) 
             
             with st.spinner("Triggering Pipeline..."):
                 try:
-                    res = requests.post(f"{BACKEND_URL}/review", json={"pr_url": pr_url, "thread_id": st.session_state.thread_id})
+                    # --- NEW: Added github_token to the JSON payload sent to the backend ---
+                    payload = {
+                        "pr_url": pr_url, 
+                        "thread_id": st.session_state.thread_id,
+                        "github_token": user_token
+                    }
+                    res = requests.post(f"{BACKEND_URL}/review", json=payload)
+                    
                     if res.status_code == 200:
                         st.session_state.is_polling = True
                     else:
@@ -219,7 +229,6 @@ with st.container(border=True):
                 except Exception as e:
                     st.error(f"Connection Failed: {e}")
             st.rerun()
-
 # -----------------------------------------------------------------------------
 # 5. POLLING LOGIC
 # -----------------------------------------------------------------------------
