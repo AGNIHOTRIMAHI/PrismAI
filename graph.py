@@ -47,12 +47,14 @@ Key LangGraph patterns used:
   • interrupt() for HITL pause-and-resume
   • MemorySaver checkpointer for state persistence
 """
-
 from __future__ import annotations
 
 from typing import Literal
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
 
-from langgraph.checkpoint.memory import MemorySaver
+
+#from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import Send
 from langgraph.graph import END, StateGraph
 from langgraph.types import interrupt
@@ -190,12 +192,23 @@ def build_graph() -> "CompiledStateGraph":
     # ── Compile with memory checkpointer ──────────────────────────────────────
     # MemorySaver persists state across interrupt/resume.
     # In production, swap for SqliteSaver or RedisSaver for durability.
-    checkpointer = MemorySaver()
-    compiled = builder.compile(checkpointer=checkpointer)
+    #checkpointer = MemorySaver()
+    #compiled = builder.compile(checkpointer=checkpointer)
 
-    log.info("langgraph_compiled_successfully")
+    #log.info("langgraph_compiled_successfully")
+    #return compiled
+    # ── Compile with PERSISTENT SQLite Checkpointer ───────────────────────────
+    # The 'check_same_thread=False' argument is vital when deploying to 
+    # servers like FastAPI/Render, which handle multiple threads.
+    conn = sqlite3.connect("prism_memory.sqlite", check_same_thread=False)
+    
+    # Initialize the SqliteSaver with our database connection
+    memory = SqliteSaver(conn)
+    memory.setup()
+    compiled = builder.compile(checkpointer=memory)
+
+    log.info("langgraph_compiled_successfully_with_sqlite_persistence")
     return compiled
-
 
 # ── Module-level singleton ────────────────────────────────────────────────────
 # Built once on import; shared across all FastAPI request handlers.
