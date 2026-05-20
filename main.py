@@ -108,6 +108,7 @@ class AgentState(TypedDict):
     crag_context:      Optional[str]
     human_approved:    Optional[bool]
     final_status:      Optional[str]
+    github_token:      Optional[str]
 
 # Initialize Gemini Model
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
