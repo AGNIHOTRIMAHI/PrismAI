@@ -208,7 +208,8 @@ def post_review_node(state: AgentState):
 
     # 3. Post to GitHub regardless of approval status
     pr_url = state.get("pr_url", "")
-    success, msg = post_github_comment(pr_url, comment_body)
+    user_token = state.get("github_token")
+    success, msg = post_github_comment(pr_url, comment_body,token=user_token)
 
     # 4. Return the status to your Streamlit Dashboard
     if success:
