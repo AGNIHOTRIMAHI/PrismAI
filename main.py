@@ -69,9 +69,10 @@ def fetch_github_diff(pr_url: str,token: Optional[str] = None) -> tuple[Optional
         return None, f"Connection error: {str(e)}"
 
 
-def post_github_comment(pr_url: str, body: str) -> tuple[bool, str]:
-    if not GITHUB_TOKEN:
-        return False, "GITHUB_TOKEN missing"
+def post_github_comment(pr_url: str, body: str,token: Optional[str] = None) -> tuple[bool, str]:
+    active_token = token or GITHUB_TOKEN
+    if not active_token:
+        return False, "No GitHub token available to post comment."
     try:
         clean_url = pr_url.strip().rstrip("/")
         parts     = clean_url.split("github.com/")[1].split("/")
@@ -80,7 +81,7 @@ def post_github_comment(pr_url: str, body: str) -> tuple[bool, str]:
         pr_number = parts[3]
         api_url   = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
         headers   = {
-            "Authorization": f"token {GITHUB_TOKEN}",
+            "Authorization": f"token {active_token}",
             "Accept": "application/vnd.github.v3+json",
         }
         log.info("Posting GitHub comment to: %s", api_url)
