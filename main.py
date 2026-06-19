@@ -71,9 +71,10 @@ def fetch_github_diff(pr_url: str,token: Optional[str] = None) -> tuple[Optional
         return None, f"Connection error: {str(e)}"
 
 
-def post_github_comment(pr_url: str, body: str) -> tuple[bool, str]:
-    if not GITHUB_TOKEN:
-        return False, "GITHUB_TOKEN missing"
+def post_github_comment(pr_url: str, body: str,token: Optional[str] = None) -> tuple[bool, str]:
+    active_token = token or GITHUB_TOKEN
+    if not active_token:
+        return False, "No GitHub token available to post comment."
     try:
         clean_url = pr_url.strip().rstrip("/")
         parts     = clean_url.split("github.com/")[1].split("/")
@@ -82,7 +83,7 @@ def post_github_comment(pr_url: str, body: str) -> tuple[bool, str]:
         pr_number = parts[3]
         api_url   = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
         headers   = {
-            "Authorization": f"token {GITHUB_TOKEN}",
+            "Authorization": f"token {active_token}",
             "Accept": "application/vnd.github.v3+json",
         }
         log.info("Posting GitHub comment to: %s", api_url)
@@ -226,6 +227,7 @@ def get_session_token(request: Request) -> Optional[str]:
 # -----------------------------------------------------------------------------
 # 1. LANGGRAPH SETUP & REAL AI AGENTS
 # -----------------------------------------------------------------------------
+<<<<<<< HEAD
 #class AgentState(TypedDict):
 #    pr_id:             str
 #    pr_url:            str  
@@ -237,6 +239,20 @@ def get_session_token(request: Request) -> Optional[str]:
  #   crag_context:      Optional[str]
  #   human_approved:    Optional[bool]
  #   final_status:      Optional[str]
+=======
+class AgentState(TypedDict):
+    pr_id:             str
+    pr_url:            str  
+    repository:        str
+    code_diff:         str
+    security_feedback: Optional[str]
+    security_score:    Optional[int] # <-- Frontend uses this to trigger HITL
+    style_feedback:    Optional[str]
+    crag_context:      Optional[str]
+    human_approved:    Optional[bool]
+    final_status:      Optional[str]
+    github_token:      Optional[str]
+>>>>>>> b9a0809f29aeaadf5429389684dba324cbb4d9bd
 
 # Initialize Gemini Model
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
@@ -337,7 +353,8 @@ def post_review_node(state: PRReviewState):
 
     # 3. Post to GitHub regardless of approval status
     pr_url = state.get("pr_url", "")
-    success, msg = post_github_comment(pr_url, comment_body)
+    user_token = state.get("github_token")
+    success, msg = post_github_comment(pr_url, comment_body,token=user_token)
 
     # 4. Return the status to your Streamlit Dashboard
     if success:
