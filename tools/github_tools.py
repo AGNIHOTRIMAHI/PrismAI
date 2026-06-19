@@ -189,7 +189,7 @@ class GitHubClient:
 
 # ── Singleton accessor ────────────────────────────────────────────────────────
 
-_client: Optional[GitHubClient] = None
+#_client: Optional[GitHubClient] = None
 
 
 def get_github_client(token: str = None) -> GitHubClient:

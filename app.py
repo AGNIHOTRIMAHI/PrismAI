@@ -6,7 +6,7 @@ import threading
 import uvicorn
 import json
 import base64
-
+from auth import init_auth_state, check_login_status, is_logged_in, render_landing_page, render_user_header_widget
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CSS (Must be first)
 # -----------------------------------------------------------------------------
@@ -158,6 +158,31 @@ st.markdown(f"""
 # -----------------------------------------------------------------------------
 # 2. CONNECT TO CLOUD BACKEND
 # -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# AUTH GATE
+# -----------------------------------------------------------------------------
+init_auth_state()
+check_login_status()
+
+if not is_logged_in():
+    render_landing_page({
+        "bg_color": bg_color,
+        "text_color": text_color,
+        "panel_bg": panel_bg,
+        "border_color": border_color,
+        "shadow_color": shadow_color,
+        "title_color": title_color,
+        "btn_bg": btn_bg,
+    })
+    st.stop()
+
+with st.sidebar:
+   render_user_header_widget({
+        "border_color": border_color,
+        "text_color": text_color
+    })
+
 BACKEND_URL = "https://prismai-backend-nih2.onrender.com"
 
 # -----------------------------------------------------------------------------
