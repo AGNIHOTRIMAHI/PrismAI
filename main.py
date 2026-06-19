@@ -2,17 +2,19 @@ import os
 import logging
 import requests
 import re
+import secrets
 from typing import Optional
 from dotenv import load_dotenv
-
-from fastapi import FastAPI
+from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
-
+from state import PRReviewState
+from agents.fetcher import fetcher_node
 load_dotenv()
 
 # -----------------------------------------------------------------------------
@@ -32,7 +34,7 @@ app = FastAPI(title="PrismAI Review Backend")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows Streamlit to talk to FastAPI
+    allow_origins=[os.getenv("FRONTEND_URL", "http://localhost:8501")],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,27 +94,155 @@ def post_github_comment(pr_url: str, body: str) -> tuple[bool, str]:
     except Exception as e:
         return False, str(e)
 
-
+GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
+GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")        # e.g. https://your-backend/auth/github/callback
+FRONTEND_URL = os.getenv("FRONTEND_URL")                    # e.g. https://your-streamlit-app.streamlit.app
+COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"  # False only for local http testing
+ 
+# In-memory session store: { session_id: {"access_token": ..., "user": {...}} }
+# Swap this for Redis in production — in-memory won't survive a server restart
+# or work across multiple backend instances.
+SESSIONS: dict[str, dict] = {}
+ 
+SESSION_COOKIE_NAME = "prismai_session"
+ 
+ 
+# -----------------------------------------------------------------------------
+# 1. KICK OFF LOGIN — Streamlit links/redirects the browser here
+# -----------------------------------------------------------------------------
+@app.get("/auth/github/login")
+async def github_login():
+    state = secrets.token_urlsafe(16)  # CSRF protection
+    SESSIONS[f"state_{state}"] = {"pending": True}
+ 
+    github_authorize_url = (
+        "https://github.com/login/oauth/authorize"
+        f"?client_id={GITHUB_CLIENT_ID}"
+        f"&redirect_uri={OAUTH_REDIRECT_URI}"
+        f"&scope=repo read:user"
+        f"&state={state}"
+    )
+    return RedirectResponse(github_authorize_url)
+ 
+ 
+# -----------------------------------------------------------------------------
+# 2. GITHUB REDIRECTS BACK HERE WITH ?code=...&state=...
+# -----------------------------------------------------------------------------
+@app.get("/auth/github/callback")
+async def github_callback(code: str, state: str):
+    if SESSIONS.pop(f"state_{state}", None) is None:
+        return JSONResponse({"error": "Invalid OAuth state"}, status_code=400)
+ 
+    # Exchange code for access token
+    token_resp = requests.post(
+        "https://github.com/login/oauth/access_token",
+        headers={"Accept": "application/json"},
+        data={
+            "client_id": GITHUB_CLIENT_ID,
+            "client_secret": GITHUB_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": OAUTH_REDIRECT_URI,
+        },
+        timeout=10,
+    )
+    token_data = token_resp.json()
+    access_token = token_data.get("access_token")
+ 
+    if not access_token:
+        log.error("GitHub OAuth token exchange failed: %s", token_data)
+        return RedirectResponse(f"{FRONTEND_URL}?auth_error=1")
+ 
+    # Fetch user profile
+    user_resp = requests.get(
+        "https://api.github.com/user",
+        headers={"Authorization": f"token {access_token}"},
+        timeout=10,
+    )
+    user_data = user_resp.json() if user_resp.status_code == 200 else {}
+ 
+    # Create a server-side session
+    session_id = secrets.token_urlsafe(32)
+    SESSIONS[session_id] = {
+        "access_token": access_token,   # GitHub token stays server-side only
+        "user": {
+            "login": user_data.get("login"),
+            "avatar_url": user_data.get("avatar_url"),
+            "name": user_data.get("name"),
+        },
+    }
+ 
+    log.info("OAuth login success for user: %s", user_data.get("login"))
+ 
+    # Redirect back to the Streamlit frontend, set HttpOnly cookie
+    response = RedirectResponse(FRONTEND_URL)
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME,
+        value=session_id,
+        httponly=True,           # JS cannot read this — XSS-proof
+        secure=COOKIE_SECURE,     # True in production (HTTPS only)
+        samesite="lax",           # allows the GitHub redirect to carry the cookie back
+        max_age=60 * 60 * 24 * 7,  # 7 days
+    )
+    return response
+ 
+ 
+# -----------------------------------------------------------------------------
+# 3. STREAMLIT CALLS THIS ON EVERY LOAD TO CHECK LOGIN STATE
+# -----------------------------------------------------------------------------
+@app.get("/auth/me")
+async def auth_me(request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    session = SESSIONS.get(session_id) if session_id else None
+ 
+    if not session or "user" not in session:
+        return {"logged_in": False, "user": None}
+ 
+    return {"logged_in": True, "user": session["user"]}
+ 
+ 
+# -----------------------------------------------------------------------------
+# 4. LOGOUT
+# -----------------------------------------------------------------------------
+@app.post("/auth/logout")
+async def auth_logout(request: Request):
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    if session_id:
+        SESSIONS.pop(session_id, None)
+ 
+    response = JSONResponse({"status": "logged_out"})
+    response.delete_cookie(SESSION_COOKIE_NAME)
+    return response
+ 
+ 
+# -----------------------------------------------------------------------------
+# HELPER: pull the logged-in user's GitHub token server-side, e.g. inside
+# /review, so PRs are fetched using THEIR permissions instead of a shared PAT
+# -----------------------------------------------------------------------------
+def get_session_token(request: Request) -> Optional[str]:
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    session = SESSIONS.get(session_id) if session_id else None
+    return session.get("access_token") if session else None
 # -----------------------------------------------------------------------------
 # 1. LANGGRAPH SETUP & REAL AI AGENTS
 # -----------------------------------------------------------------------------
-class AgentState(TypedDict):
-    pr_id:             str
-    pr_url:            str  
-    repository:        str
-    code_diff:         str
-    security_feedback: Optional[str]
-    security_score:    Optional[int] # <-- Frontend uses this to trigger HITL
-    style_feedback:    Optional[str]
-    crag_context:      Optional[str]
-    human_approved:    Optional[bool]
-    final_status:      Optional[str]
+#class AgentState(TypedDict):
+#    pr_id:             str
+#    pr_url:            str  
+ #   repository:        str
+ #   code_diff:         str
+ #   security_feedback: Optional[str]
+ #   security_score:    Optional[int] # <-- Frontend uses this to trigger HITL
+ #   style_feedback:    Optional[str]
+ #   crag_context:      Optional[str]
+ #   human_approved:    Optional[bool]
+ #   final_status:      Optional[str]
 
 # Initialize Gemini Model
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
 
 # ── Security Agent ──────────────────────────────────────────────────────────
-def security_agent_node(state: AgentState):
+def security_agent_node(state: PRReviewState):
     log.info("▶  REAL SECURITY AGENT running...")
     diff = state.get("code_diff", "")
     
@@ -147,7 +277,7 @@ def security_agent_node(state: AgentState):
     }
 
 # ── Style & Performance Agent ───────────────────────────────────────────────
-def style_agent_node(state: AgentState):
+def style_agent_node(state:PRReviewState):
     log.info("▶  REAL STYLE & PERFORMANCE AGENT running...")
     diff = state.get("code_diff", "")
     
@@ -164,7 +294,7 @@ def style_agent_node(state: AgentState):
     return {"style_feedback": response}
 
 # ── CRAG / Diagnostics Node ──────────────────────────────────────────────────
-def crag_tavily_node(state: AgentState):
+def crag_tavily_node(state:PRReviewState):
     log.info("▶  CRAG EVALUATOR running...")
     diff = state.get("code_diff", "")
     
@@ -181,7 +311,7 @@ def crag_tavily_node(state: AgentState):
 
 # ── Post Review Node ────────────────────────────────────────────────────────
 # ── Post Review Node ────────────────────────────────────────────────────────
-def post_review_node(state: AgentState):
+def post_review_node(state: PRReviewState):
     log.info("▶  POST REVIEW NODE running (human_approved=%s)...", state.get("human_approved"))
 
     is_approved = state.get("human_approved")
@@ -219,18 +349,19 @@ def post_review_node(state: AgentState):
         return {"final_status": f"⚠️ GitHub post failed: {msg}"}
 # ── Graph assembly ───────────────────────────────────────────────────────────
 memory = MemorySaver()
-workflow = StateGraph(AgentState)
-
+workflow = StateGraph(PRReviewState)
+workflow.add_node("fetcher",        fetcher_node)    
 workflow.add_node("security_agent", security_agent_node)
 workflow.add_node("style_agent",    style_agent_node)
 workflow.add_node("crag_tavily",    crag_tavily_node)
 workflow.add_node("post_review",    post_review_node)
 
-workflow.add_edge(START,             "security_agent")
-workflow.add_edge("security_agent",  "style_agent")
-workflow.add_edge("style_agent",     "crag_tavily")
-workflow.add_edge("crag_tavily",     "post_review")
-workflow.add_edge("post_review",     END)
+workflow.add_edge(START,             "fetcher")
+workflow.add_edge("fetcher",  "security_agent")
+workflow.add_edge("security_agent", "style_agent")
+workflow.add_edge("style_agent",    "crag_tavily")
+workflow.add_edge("crag_tavily",    "post_review")
+workflow.add_edge("post_review",    END)
 
 # Interrupt BEFORE post_review so the human gate fires at the right point
 graph = workflow.compile(checkpointer=memory, interrupt_before=["post_review"])
@@ -253,12 +384,14 @@ class ApprovalRequest(BaseModel):
 # 3. ENDPOINTS
 # -----------------------------------------------------------------------------
 @app.post("/review")
-async def start_review(req: ReviewRequest):
+async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
     log.info("=== NEW REVIEW REQUEST  thread=%s  url=%s ===", req.thread_id, req.pr_url)
 
-    diff, error = fetch_github_diff(req.pr_url,req.github_token)
+    diff, error = fetch_github_diff(req.pr_url, req.github_token)
     if error:
-        return {"error": error}
+        log.error("Aborting review pipeline: %s", error)
+        # FIX 1: Raise actual HTTP error so Streamlit knows it failed!
+        raise HTTPException(status_code=400, detail=error)
 
     diff_preview = diff[:1000] + "\n\n...[Truncated for Dashboard View]..." if len(diff) > 1000 else diff
     config = {"configurable": {"thread_id": req.thread_id}}
@@ -271,8 +404,10 @@ async def start_review(req: ReviewRequest):
         "github_token": req.github_token,
     }
 
-    log.info("Invoking LangGraph pipeline with Gemini...")
-    graph.invoke(initial_state, config)
+    log.info("Offloading LangGraph pipeline to background worker...")
+    # FIX 2: Run the graph in the background so the server doesn't freeze!
+    background_tasks.add_task(graph.invoke, initial_state, config)
+    
     return {"status": "pipeline_started", "diff_preview": diff_preview}
 
 
@@ -282,9 +417,10 @@ async def get_state(thread_id: str):
     state_info = graph.get_state(config)
 
     return {
-        "values":            state_info.values,
-        "waiting_for_human": bool(state_info.next),
-        "done":              not bool(state_info.next) and bool(state_info.values.get("final_status")),
+        "values":state_info.values,
+        "waiting_for_human": bool(state_info.next),   # True when graph is interrupted (next node exists)
+        "done": not bool(state_info.next) and bool(state_info.values.get("final_report_markdown")),
+       
     }
 
 
