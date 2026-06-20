@@ -15,6 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
 from state import PRReviewState
 from agents.fetcher import fetcher_node
+from repo_chat import answer_repo_question
 load_dotenv()
 
 # -----------------------------------------------------------------------------
@@ -214,7 +215,13 @@ async def auth_logout(request: Request):
     response = JSONResponse({"status": "logged_out"})
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
- 
+
+class RepoChatRequest(BaseModel):
+    repo_url: str
+    question: str
+    history: list[list[str]] = []
+    github_token: Optional[str] = None
+    thread_id: Optional[str] = None 
  
 # -----------------------------------------------------------------------------
 # HELPER: pull the logged-in user's GitHub token server-side, e.g. inside
@@ -227,19 +234,7 @@ def get_session_token(request: Request) -> Optional[str]:
 # -----------------------------------------------------------------------------
 # 1. LANGGRAPH SETUP & REAL AI AGENTS
 # -----------------------------------------------------------------------------
-<<<<<<< HEAD
-#class AgentState(TypedDict):
-#    pr_id:             str
-#    pr_url:            str  
- #   repository:        str
- #   code_diff:         str
- #   security_feedback: Optional[str]
- #   security_score:    Optional[int] # <-- Frontend uses this to trigger HITL
- #   style_feedback:    Optional[str]
- #   crag_context:      Optional[str]
- #   human_approved:    Optional[bool]
- #   final_status:      Optional[str]
-=======
+
 class AgentState(TypedDict):
     pr_id:             str
     pr_url:            str  
@@ -252,7 +247,7 @@ class AgentState(TypedDict):
     human_approved:    Optional[bool]
     final_status:      Optional[str]
     github_token:      Optional[str]
->>>>>>> b9a0809f29aeaadf5429389684dba324cbb4d9bd
+
 
 # Initialize Gemini Model
 llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0.1)
@@ -364,6 +359,11 @@ def post_review_node(state: PRReviewState):
             return {"final_status": "🛑 Review blocked. Rejection comment posted to GitHub PR."}
     else:
         return {"final_status": f"⚠️ GitHub post failed: {msg}"}
+    
+@app.post("/chat/repo")
+async def chat_repo(req: RepoChatRequest):
+    log.info("=== REPO CHAT repo=%s q=%r ===", req.repo_url, req.question[:80])
+    return answer_repo_question(req.repo_url, req.question, req.history, req.github_token, req.thread_id)
 # ── Graph assembly ───────────────────────────────────────────────────────────
 memory = MemorySaver()
 workflow = StateGraph(PRReviewState)

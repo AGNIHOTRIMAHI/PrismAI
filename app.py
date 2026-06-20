@@ -7,6 +7,7 @@ import uvicorn
 import json
 import base64
 from auth import init_auth_state, check_login_status, is_logged_in, render_landing_page, render_user_header_widget
+from chat_with_repo import render_chat_widget
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION & CSS (Must be first)
 # -----------------------------------------------------------------------------
@@ -99,7 +100,7 @@ st.markdown(f"""
         background-color: transparent !important;
     }}
     /* Custom Circular Theme Toggle Button */
-   button[kind="secondary"] {{
+    button[kind="secondary"] {{
         border-radius: 50% !important;
         width: 48px !important;
         height: 48px !important;
@@ -358,3 +359,11 @@ with col_right:
 
         if "final_status" in values:
             st.success(values["final_status"])
+
+render_chat_widget(
+    backend_url=BACKEND_URL,
+    btn_bg=btn_bg,
+    shadow_color=shadow_color,
+    repo_url=pr_url,
+    github_token=user_token,
+)
