@@ -184,6 +184,15 @@ with st.sidebar:
         "text_color": text_color
     })
 
+# --- SAFE CHAT ICON LOADING ---
+try:
+    with open("assets/chat_logo.png", "rb") as img_file:
+        b64_string = base64.b64encode(img_file.read()).decode().replace('\n', '')
+    my_local_icon = f"data:image/png;base64,{b64_string}"
+except FileNotFoundError:
+    # Fallback to a web image so the app never crashes
+    my_local_icon = "https://cdn-icons-png.flaticon.com/512/8618/8618881.png"
+
 BACKEND_URL = "https://prismai-backend-nih2.onrender.com"
 
 # -----------------------------------------------------------------------------
@@ -199,12 +208,19 @@ if "graph_state" not in st.session_state:
 # -----------------------------------------------------------------------------
 # 4. UI HEADER & TRIGGER
 # -----------------------------------------------------------------------------
+# --- SAFE CHAT ICON LOADING ---
 try:
+
     local_image_path = "assets/logo.jpeg"
+
     with open(local_image_path, "rb") as image_file:
+
         encoded_string = base64.b64encode(image_file.read()).decode()
-    logo_url = f"data:image/jpeg;base64,{encoded_string}" 
+
+    logo_url = f"data:image/jpeg;base64,{encoded_string}"
+
 except FileNotFoundError:
+
     logo_url = "https://cdn-icons-png.flaticon.com/512/8618/8618881.png"
 
 head_col1, head_col2 = st.columns([15, 1])
@@ -360,7 +376,8 @@ with col_right:
         if "final_status" in values:
             st.success(values["final_status"])
 
-render_chat_widget(
+render_chat_widget(   
+    icon_url=my_local_icon,
     backend_url=BACKEND_URL,
     btn_bg=btn_bg,
     shadow_color=shadow_color,
