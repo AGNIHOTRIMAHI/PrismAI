@@ -12,7 +12,7 @@ from state import PRReviewState
 from datetime import datetime, timezone
 from graph import pr_review_graph as graph
 from repo_chat import answer_repo_question
-load_dotenv()
+load_dotenv(override=True)
 
 # -----------------------------------------------------------------------------
 # LOGGING
@@ -266,12 +266,30 @@ async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
 async def get_state(thread_id: str):
     config     = {"configurable": {"thread_id": thread_id}}
     state_info = graph.get_state(config)
-
+    if not state_info or not state_info.values:
+        return {"values": {}, "waiting_for_human": False, "done": False}
+ 
+    values = state_info.values
+    next_nodes = set(state_info.next) if state_info.next else set()
+ 
+    is_at_hitl_interrupt = "human_review_interrupt" in next_nodes
+    agents_fully_done = (
+        "security_report"       in values and
+        "crag_enhanced_context" in values
+    )
+ 
+    waiting_for_human = is_at_hitl_interrupt and agents_fully_done
+    #Graph is done when: no next nodes, has final output, not waiting for human
+    done = (
+        not state_info.next
+        and not waiting_for_human
+        and bool(values.get("final_report_markdown"))
+    )
+ 
     return {
-        "values":state_info.values,
-        "waiting_for_human": bool(state_info.next),   # True when graph is interrupted (next node exists)
-        "done": not bool(state_info.next) and bool(state_info.values.get("final_report_markdown")),
-       
+        "values":            values,
+        "waiting_for_human": waiting_for_human,
+        "done":              done,
     }
 
 
@@ -290,9 +308,9 @@ async def approve_pipeline(req: ApprovalRequest):
         "comment":   "Approved via PrismAI HITL gate." if req.approved else "Changes requested via PrismAI HITL gate.",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
-   }, as_node="hitl_notify_node")
+   }, as_node="human_review_interrupt")
     graph.invoke(None, config)
-
+    
     return {"status": "done", "approved": req.approved}
 
 
