@@ -570,8 +570,12 @@ elif phase == "hitl":
                     try:
                         post_res = requests.post(
                             f"{BACKEND_URL}/approve",
-                            json={"thread_id": st.session_state.thread_id,
-                                  "approved": decision == "Approve Merge"},
+                            json={
+                                "thread_id": st.session_state.thread_id,
+                                "approved": decision == "Approve Merge",
+                                "pr_url":pr_url,
+                                "user_token":user_token,
+                            },
                         )
                         if post_res.status_code == 200:
                             st.session_state.phase = "resuming"

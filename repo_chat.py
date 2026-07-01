@@ -22,8 +22,13 @@ from langgraph.graph import END, START, StateGraph
 
 log = logging.getLogger(__name__)
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+from dotenv import load_dotenv
+load_dotenv()
+
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
+GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "")
 RELEVANCE_THRESHOLD = 0.45
 
 # ── In-memory FAISS cache so we don't re-index the same repo twice ──────────
@@ -49,7 +54,7 @@ class RepoChatState(TypedDict):
 def _parse_repo(repo_url: str) -> tuple[str, str]:
     """Extract owner and repo name from a GitHub URL or 'owner/repo' string."""
     repo_url = repo_url.strip().rstrip("/")
-    match = re.search(r"github\.com/([^/]+)/([^/]+?)(?:\.git)?$", repo_url)
+    match = re.search(r"github\.com/([^/]+)/([^/]+?)(?:/|\.git|$)", repo_url)
     if match:
         return match.group(1), match.group(2)
     parts = repo_url.split("/")
@@ -100,37 +105,61 @@ def _fetch_repo_files(owner: str, repo: str, token: Optional[str]) -> list[Docum
     log.info("Fetched %d files from %s/%s", len(docs), owner, repo)
     return docs
 
+import hashlib
+
+_FAISS_DISK_DIR = os.path.join(tempfile.gettempdir(), "prismai_faiss_cache")
 
 def _get_or_build_index(repo_url: str, token: Optional[str]) -> FAISS:
     """Return a cached FAISS index for the repo, building it if needed."""
     cache_key = repo_url.strip().rstrip("/")
     if cache_key in _faiss_cache:
-        log.info("FAISS cache hit for %s", cache_key)
+        log.info("FAISS cache hit (memory) for %s", cache_key)
         return _faiss_cache[cache_key]
 
     owner, repo = _parse_repo(repo_url)
+    embeddings = GoogleGenerativeAIEmbeddings(
+        model="models/gemini-embedding-001",
+        google_api_key=GEMINI_API_KEY or None,
+    )
+
+    DEV_SAMPLE_RATIO = float(os.getenv("DEV_SAMPLE_RATIO", "1.0"))
+    cache_suffix = f"_sample{DEV_SAMPLE_RATIO}" if DEV_SAMPLE_RATIO < 1.0 else ""
+    disk_path = os.path.join(_FAISS_DISK_DIR, hashlib.md5(cache_key.encode()).hexdigest() + cache_suffix)
+
+    if os.path.isdir(disk_path):
+        log.info("FAISS cache hit (disk) for %s", cache_key)
+        index = FAISS.load_local(disk_path, embeddings, allow_dangerous_deserialization=True)
+        _faiss_cache[cache_key] = index
+        return index
+
     docs = _fetch_repo_files(owner, repo, token)
     if not docs:
         raise ValueError(f"No indexable files found in {owner}/{repo}")
+    
+        # ── DEV MODE: only index a fraction of the repo to stay under free-tier quota ──
+    DEV_SAMPLE_RATIO = float(os.getenv("DEV_SAMPLE_RATIO", "1.0"))  # e.g. 0.1 = 10%
+    if DEV_SAMPLE_RATIO < 1.0:
+        sample_size = max(1, int(len(docs) * DEV_SAMPLE_RATIO))
+        docs = docs[:sample_size]
+        log.warning("DEV MODE: sampling %d files (%.0f%%) for %s/%s",
+                    sample_size, DEV_SAMPLE_RATIO * 100, owner, repo)
 
-    splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=200)
+
+    splitter = RecursiveCharacterTextSplitter(chunk_size=3000, chunk_overlap=300)
     chunks = splitter.split_documents(docs)
     log.info("Indexing %d chunks for %s/%s", len(chunks), owner, repo)
 
-    embeddings = GoogleGenerativeAIEmbeddings(
-        model="models/gemini-embedding-001",
-        google_api_key=GEMINI_API_KEY,
-    )
     index = FAISS.from_documents(chunks, embeddings)
+    os.makedirs(_FAISS_DISK_DIR, exist_ok=True)
+    index.save_local(disk_path)
     _faiss_cache[cache_key] = index
     return index
-
 
 def _grade_relevance(question: str, docs: list[Document]) -> float:
     """Ask Gemini to score how relevant the retrieved docs are to the question (0–1)."""
     if not docs:
         return 0.0
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", google_api_key=GEMINI_API_KEY, temperature=0)
+    llm = ChatGoogleGenerativeAI(model=GOOGLE_MODEL, google_api_key=GEMINI_API_KEY, temperature=0)
     context = "\n\n".join(d.page_content[:600] for d in docs[:4])
     prompt = f"""Rate how relevant the following code/docs are to the question on a scale of 0.0 to 1.0.
 Return ONLY a decimal number, nothing else.
@@ -194,7 +223,7 @@ def web_search_node(state: RepoChatState) -> dict:
 
 def generate_node(state: RepoChatState) -> dict:
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model=GOOGLE_MODEL,
         google_api_key=GEMINI_API_KEY,
         temperature=0.3,
     )

@@ -1,3 +1,7 @@
+from dotenv import load_dotenv
+load_dotenv()  # ← must come before anything that reads env vars
+
+
 import os
 import logging
 import requests
@@ -12,7 +16,19 @@ from state import PRReviewState
 from datetime import datetime, timezone
 from graph import pr_review_graph as graph
 from repo_chat import answer_repo_question
-load_dotenv(override=True)
+# load_dotenv(override=True)
+
+
+class ChatRequest(BaseModel):
+    repo_url: str
+    question: str
+    history: list[list[str]] = []
+    github_token: Optional[str] = None
+    thread_id: Optional[str] = None
+
+
+
+
 
 # -----------------------------------------------------------------------------
 # LOGGING
@@ -237,6 +253,8 @@ class ReviewRequest(BaseModel):
 class ApprovalRequest(BaseModel):
     thread_id: str
     approved:  bool
+    pr_url:    str
+    user_token: Optional[str] = None
 
 
 # -----------------------------------------------------------------------------
@@ -292,15 +310,15 @@ async def get_state(thread_id: str):
         "done":              done,
     }
 
-
 @app.post("/approve")
-async def approve_pipeline(req: ApprovalRequest):
+async def approve_pipeline(req: ApprovalRequest, request: Request):
     log.info("=== APPROVAL  thread=%s  approved=%s ===", req.thread_id, req.approved)
     config = {"configurable": {"thread_id": req.thread_id}}
 
     # WITH THIS
 
-
+    session_token = get_session_token(request) 
+    active_token  = session_token or req.user_token or os.getenv("GITHUB_TOKEN")
     graph.update_state(config, {
     "hitl_decision": {
         "reviewer":  "senior_engineer",
@@ -310,8 +328,27 @@ async def approve_pipeline(req: ApprovalRequest):
     }
    }, as_node="human_review_interrupt")
     graph.invoke(None, config)
-    
+    state_info = graph.get_state(config)
+    final_report = state_info.values.get("final_report_markdown", "")
+    if final_report and req.pr_url:
+        success, msg = post_github_comment(
+            pr_url=req.pr_url,
+            body=final_report,
+            token=active_token,  # Using the prioritized token
+        )
+        log.info("GitHub comment posted: %s — %s", success, msg)
     return {"status": "done", "approved": req.approved}
+
+@app.post("/chat/repo")
+async def chat_repo(req: ChatRequest):
+    result = answer_repo_question(
+        repo_url=req.repo_url,
+        question=req.question,
+        history=req.history,
+        token=req.github_token,
+        thread_id=req.thread_id,
+    )
+    return result
 
 
 if __name__ == "__main__":
