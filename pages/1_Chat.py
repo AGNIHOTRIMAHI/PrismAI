@@ -24,7 +24,8 @@ btn_bg       = "#9d4edd"
 btn_hover    = "#b5179e"
 shadow_color = "rgba(157,78,221,0.7)"
 
-BACKEND_URL  = st.session_state.get("chat_backend_url", "https://prismai-backend-nih2.onrender.com")
+# BACKEND_URL  = st.session_state.get("chat_backend_url", "https://prismai-backend-nih2.onrender.com")
+BACKEND_URL  = st.session_state.get("chat_backend_url", "http://localhost:8000")
 repo_url     = st.session_state.get("chat_repo_url", "")
 github_token = st.session_state.get("chat_github_token", "")
 
@@ -159,12 +160,23 @@ button[data-testid="stBaseButton-secondary"] {{
 # ── Helper ────────────────────────────────────────────────────────────────────
 def ask_backend(question: str) -> dict:
     try:
+        # Safely extract answer string — prior turns may have stored error dicts
+        def _extract_answer(bot_data) -> str:
+            if isinstance(bot_data, dict):
+                answer = bot_data.get("answer", "")
+                # answer itself might be a stringified error — still a str, so fine
+                return answer if isinstance(answer, str) else str(answer)
+            return str(bot_data) if bot_data else ""
+
         resp = requests.post(
             f"{BACKEND_URL}/chat/repo",
             json={
                 "repo_url": repo_url,
                 "question": question,
-                "history": st.session_state.chat_history,
+                "history": [
+                    [turn[0], _extract_answer(turn[1])]
+                    for turn in st.session_state.chat_history
+                ],
                 "github_token": github_token or None,
                 "thread_id": st.session_state.chat_thread_id,
             },
@@ -176,6 +188,7 @@ def ask_backend(question: str) -> dict:
         return {"answer": "⏱️ Timed out — the repo may be large, try again.", "sources": [], "crag_relevance_score": 0, "crag_triggered_web_search": False}
     except Exception as e:
         return {"answer": f"❌ Error: {e}", "sources": [], "crag_relevance_score": 0, "crag_triggered_web_search": False}
+    
 
 # ── Header ────────────────────────────────────────────────────────────────────
 back_col, title_col, clear_col = st.columns([1, 8, 1])
@@ -241,7 +254,14 @@ for user_msg, bot_data in st.session_state.chat_history:
 
     # Bot bubble
     if isinstance(bot_data, dict):
-        answer  = bot_data.get("answer", "")
+        # answer  = bot_data.get("answer", "")
+        import html as _html
+        answer_raw = bot_data.get("answer", "")
+        # Escape only if it looks like plain text (errors), not intentional HTML
+        answer = answer_raw if answer_raw.strip().startswith("<") is False else _html.escape(answer_raw)
+        # Actually simpler — always escape the answer since badge/src HTML is built separately:
+        answer = _html.escape(answer_raw)
+
         sources = bot_data.get("sources", [])
         web     = bot_data.get("crag_triggered_web_search", False)
         score   = bot_data.get("crag_relevance_score", 0)
