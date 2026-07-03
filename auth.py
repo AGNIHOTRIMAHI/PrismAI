@@ -5,7 +5,7 @@ import base64
 import os
 
 
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://prismai-backend-nih2.onrender.com")
 
 def init_auth_state():
     if "auth_checked" not in st.session_state:
