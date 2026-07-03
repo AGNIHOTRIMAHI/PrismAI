@@ -59,7 +59,7 @@ def fetcher_node(state: PRReviewState) -> PRReviewState:
         primary_diff = diff_chunks[0] if diff_chunks else diff
 
         return {
-            **state,
+            #**state,
             "pr_metadata": metadata,
             "diff_context": primary_diff,
             "diff_chunks": diff_chunks,
@@ -72,7 +72,7 @@ def fetcher_node(state: PRReviewState) -> PRReviewState:
     except Exception as exc:
         log.error("fetcher_failed", error=str(exc), pr_url=pr_url)
         return {
-            **state,
+            #**state,
             "error": f"Fetcher failed: {exc}",
             "node_execution_log": [
                 f"[{datetime.utcnow().isoformat()}] fetcher_node: ERROR — {exc}"
