@@ -4,3 +4,8 @@ __pycache__/
 .env
 *.sqlite
 *.db
+
+prism_memory.sqlite-shm
+prism_memory.sqlite-wal
+*.sqlite-shm
+*.sqlite-wal
