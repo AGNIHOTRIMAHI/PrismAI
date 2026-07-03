@@ -24,8 +24,8 @@ btn_bg       = "#9d4edd"
 btn_hover    = "#b5179e"
 shadow_color = "rgba(157,78,221,0.7)"
 
-# BACKEND_URL  = st.session_state.get("chat_backend_url", "https://prismai-backend-nih2.onrender.com")
-BACKEND_URL  = st.session_state.get("chat_backend_url", "http://localhost:8000")
+BACKEND_URL  = st.session_state.get("chat_backend_url", "https://prismai-backend-nih2.onrender.com")
+#BACKEND_URL  = st.session_state.get("chat_backend_url", "http://localhost:8000")
 repo_url     = st.session_state.get("chat_repo_url", "")
 github_token = st.session_state.get("chat_github_token", "")
 
