@@ -5,6 +5,11 @@ import time
 import base64
 from auth import init_auth_state, check_login_status, is_logged_in, render_landing_page, render_user_header_widget
 from chat_with_repo import render_chat_widget
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
 
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION
@@ -369,8 +374,10 @@ def infer_stage(values: dict) -> int:
 # -----------------------------------------------------------------------------
 # 3. BACKEND URL
 # -----------------------------------------------------------------------------
-#BACKEND_URL = "http://localhost:8000"
-BACKEND_URL="https://prismai-backend-nih2.onrender.com"
+
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+
 # -----------------------------------------------------------------------------
 # 4. AUTH GATE
 # -----------------------------------------------------------------------------

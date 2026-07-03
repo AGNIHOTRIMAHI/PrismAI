@@ -10,11 +10,19 @@ Clicks pass through the image straight to the invisible button underneath, so
 the popover still opens/closes normally -- but visually all the user sees is
 your custom icon.
 """
+import os
 import streamlit as st
+from dotenv import load_dotenv
 
+load_dotenv()
+
+BACKEND_URL = os.getenv(
+    "BACKEND_URL",
+    "https://prismai-backend-nih2.onrender.com"
+)
 
 def render_chat_widget(
-    backend_url: str = "https://prismai-backend-nih2.onrender.com",
+    backend_url: str = BACKEND_URL,
     btn_bg: str = "#9d4edd",
     shadow_color: str = "rgba(157,78,221,0.5)",
     repo_url: str = "",
