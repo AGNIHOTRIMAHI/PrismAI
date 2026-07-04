@@ -37,6 +37,8 @@ tiktoken>=0.7.0              # Standard for token counting/chunking
 # ─── Web Search (CRAG) ────────────────────────────────────────────────────────
 tavily-python>=0.3.0
 
+#langsmith
+langsmith>=0.1.0
 # ─── Utilities ────────────────────────────────────────────────────────────────
 python-dotenv>=1.0.0
 structlog>=24.2.0

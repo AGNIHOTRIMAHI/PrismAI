@@ -3,6 +3,9 @@ graph.py — LangGraph Multi-Agent PR Reviewer Workflow
 """
 from __future__ import annotations
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from typing import Literal
 import sqlite3
 from langgraph.checkpoint.sqlite import SqliteSaver
