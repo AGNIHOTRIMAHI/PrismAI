@@ -189,7 +189,8 @@ async def github_callback(code: str, state: str):
     log.info("OAuth login success for user: %s", user_data.get("login"))
  
     # Redirect back to the Streamlit frontend, set HttpOnly cookie
-    response = RedirectResponse(FRONTEND_URL)
+    #response = RedirectResponse(FRONTEND_URL)
+    response = RedirectResponse(f"{FRONTEND_URL}?session_id={session_id}")
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=session_id,
