@@ -6,13 +6,18 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv()  # only affects LOCAL runs — Streamlit Cloud ignores this and uses its own Secrets
 
 
+# IMPORTANT:
+# - Locally: your .env's BACKEND_URL=http://localhost:8000 will be picked up by
+#   os.getenv() below, since load_dotenv() loads it into the environment first.
+# - On Streamlit Cloud: set BACKEND_URL under Settings -> Secrets to your real
+#   production Render URL. The fallback below is just a safety net in case that
+#   secret is ever missing in production — it should NOT be localhost.
+BACKEND_URL = os.getenv("BACKEND_URL", "https://prismai-backend-lhei.onrender.com")
 
-#BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-BACKEND_URL = os.getenv("BACKEND_URL", "https://prismai-backend-nih2.onrender.com")
 def init_auth_state():
     if "auth_checked" not in st.session_state:
         st.session_state.auth_checked = False
@@ -219,6 +224,7 @@ html, body, [data-testid="stAppViewContainer"] {{
     width: fit-content;
     margin-top: 0 0 35px 0;
     box-shadow: 0 4px 15px {shadow_color};
+    cursor: pointer;
 }}
 .github-login-link:hover {{
     filter: brightness(1.1);
@@ -325,14 +331,39 @@ html, body, [data-testid="stAppViewContainer"] {{
 <p class="landing-subtext">
                     Navigate your codebase with confidence. Let PrismAI handle the heavy lifting, mapping out the complexities of every PR so you can focus on the mission ahead.
 </p>
+</div>
+        """, unsafe_allow_html=True)
 
-<a class="github-login-link" href="{BACKEND_URL}/auth/github/login" target="_top">
-                    <svg height="20" viewBox="0 0 16 16" width="20" fill="currentColor" style="margin-right: 8px;">
-                        <path fill-rule="evenodd" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
-                    </svg>
-                    Sign in with GitHub
-</a>
+        # NOTE: st.link_button is used here instead of a raw <a> tag inside
+        # st.markdown(unsafe_allow_html=True). Streamlit renders unsafe_allow_html
+        # content inside a SANDBOXED iframe (no allow-top-navigation flag), so any
+        # <a> or onclick-based navigation inside that block gets silently blocked
+        # by the browser when trying to leave the page (e.g. for OAuth redirects).
+        # st.link_button is a native Streamlit widget rendered in the main app
+        # frame, so it navigates normally like a real link.
+        st.markdown(f"""
+<style>
+div[data-testid="stLinkButton"] a {{
+    background: {btn_bg} !important;
+    color: #ffffff !important;
+    font-weight: 600 !important;
+    font-size: 1.05rem !important;
+    padding: 14px 30px !important;
+    border-radius: 10px !important;
+    text-decoration: none !important;
+    box-shadow: 0 4px 15px {shadow_color} !important;
+    border: none !important;
+}}
+div[data-testid="stLinkButton"] a:hover {{
+    filter: brightness(1.1);
+}}
+</style>
+        """, unsafe_allow_html=True)
 
+        st.link_button("🔗 Sign in with GitHub", f"{BACKEND_URL}/auth/github/login")
+
+        st.markdown(f"""
+<div class="split-left" style="height:auto; padding-top:20px;">
 <div class="terminal-container">
                     <div class="terminal-header">
                         <div class="mac-dots">
