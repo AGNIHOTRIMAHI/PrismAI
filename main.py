@@ -1,8 +1,18 @@
 from dotenv import load_dotenv
 load_dotenv()  # ← must come before anything that reads env vars
-
-
 import os
+
+# ── TEMPORARY: verify LangSmith env vars loaded correctly ──────────────────
+print("LangSmith tracing enabled:", os.getenv("LANGSMITH_TRACING"))
+print("LangSmith project:", os.getenv("LANGSMITH_PROJECT"))
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# ── Hide sensitive input data from LangSmith traces ─────────────────────────
+os.environ["LANGSMITH_HIDE_INPUTS"] = "true"
+os.environ["LANGSMITH_HIDE_OUTPUTS"] = "false"
+# ─────────────────────────────────────────────────────────────────────────
+
 import logging
 import requests
 import secrets
@@ -266,8 +276,13 @@ async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
     log.info("=== NEW REVIEW REQUEST  thread=%s  url=%s ===", req.thread_id, req.pr_url)
 
     
-    config = {"configurable": {"thread_id": req.thread_id}}
-
+    #config = {"configurable": {"thread_id": req.thread_id}}
+    config = {
+    "configurable": {"thread_id": req.thread_id},
+    "run_name": f"pr_review::{req.pr_url.split('/')[-1]}",
+    "tags": ["pr-review", "background"],
+    "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id},
+   }
     initial_state = {
         
         "pr_url":     req.pr_url,
@@ -314,10 +329,15 @@ async def get_state(thread_id: str):
 @app.post("/approve")
 async def approve_pipeline(req: ApprovalRequest, request: Request):
     log.info("=== APPROVAL  thread=%s  approved=%s ===", req.thread_id, req.approved)
-    config = {"configurable": {"thread_id": req.thread_id}}
+    #config = {"configurable": {"thread_id": req.thread_id}}
 
     # WITH THIS
-
+    config = {
+    "configurable": {"thread_id": req.thread_id},
+    "run_name": f"pr_review_resume::{req.thread_id[:8]}",
+    "tags": ["pr-review", "hitl-resume"],
+    "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id, "approved": req.approved},
+    }
     session_token = get_session_token(request) 
     active_token  = session_token or req.user_token or os.getenv("GITHUB_TOKEN")
     graph.update_state(config, {
