@@ -107,12 +107,20 @@ def render_landing_page(theme: dict):
 
 /* 1. LOCK THE VIEWPORT & PREVENT SCROLLING */
 html, body, [data-testid="stAppViewContainer"] {{
-    overflow: hidden !important;
-    height: 100vh !important;
+    overflow-y: auto !important;
+    min-height: 100vh !important
+    height: auto !important;
     margin: 0;
     padding: 0;
 }}
 
+div[data-testid="stVerticalBlock"] > div[data-testid="element-container"] {{
+    margin-bottom: 0 !important;
+}}
+div[data-testid="stLinkButton"] {{
+    margin: 4px 0 !important;
+}}
+                
 .block-container {{
     padding-top: 2rem !important;
     padding-bottom: 0rem !important;
@@ -155,8 +163,8 @@ html, body, [data-testid="stAppViewContainer"] {{
     display: flex;
     flex-direction: column;
     justify-content: center;
-    padding: 20px 40px 20px 10px;
-    height: 85vh; 
+    padding: 40px 40px 10px 10px;
+    height: auto; 
 }}
 
 .cursive-subheading {{
@@ -370,20 +378,63 @@ div[data-testid="stLinkButton"] a {{
     background: {btn_bg} !important;
     color: #ffffff !important;
     font-weight: 600 !important;
-    font-size: 1.05rem !important;
-    padding: 14px 30px !important;
-    border-radius: 10px !important;
+    font-size: 1.5rem !important;
+    padding: 16px 36px !important;
+    border-radius: 12px !important;
     text-decoration: none !important;
     box-shadow: 0 4px 15px {shadow_color} !important;
     border: none !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    transition: all 0.25s ease ;
 }}
+
+div[data-testid="stLinkButton"] a p {{
+    font-weight: 700 !important;           /* Extra bold */
+    font-size: 1.25rem !important;          /* Much larger text */
+    margin: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;                  /* Space between logo and text */
+}}
+
 div[data-testid="stLinkButton"] a:hover {{
-    filter: brightness(1.1);
+    filter: brightness(1.1) !important;
+    transform: translateY(-4px) scale(1.02)!important;
+    box-shadow: 0 12px 25px {shadow_color} !important;
+}}
+
+div[data-testid="stLinkButton"] a:active {{
+    transform: translateY(2px) scale(0.98) !important;
+    box-shadow: 0 4px 10px {shadow_color} !important;
+    filter: brightness(1.0) !important;
+    transition: all 0.1s ease-out !important; /* Super fast response on click */
+}}
+
+/* Recreate the GitHub logo using a CSS mask, since st.link_button only
+   accepts a plain text/emoji label, not raw SVG/HTML like the original
+   <a> tag did. This masks the exact same GitHub icon path in solid white,
+   matching the original design. */
+div[data-testid="stLinkButton"] a p::before {{
+    content: "";
+    display: inline-block;
+    width: 26px;
+    height: 26px;
+    margin-right: 4px;
+    vertical-align: middle;
+    background-color: #ffffff;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path d='M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z'/></svg>");
 }}
 </style>
         """, unsafe_allow_html=True)
 
-        st.link_button("🔗 Sign in with GitHub", f"{BACKEND_URL}/auth/github/login")
+        st.link_button("Sign in with GitHub", f"{BACKEND_URL}/auth/github/login")
 
         st.markdown(f"""
 <div class="split-left" style="height:auto; padding-top:20px;">
