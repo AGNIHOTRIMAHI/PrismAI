@@ -23,15 +23,38 @@ def init_auth_state():
         st.session_state.auth_checked = False
     if "github_user" not in st.session_state:
         st.session_state.github_user = None
+    if "prismai_session_id" not in st.session_state:
+        st.session_state.prismai_session_id = None
+
+    # Capture session_id from the URL query param set by the backend's OAuth
+    # callback redirect (see main.py). This is required because the frontend
+    # (streamlit.app) and backend (onrender.com) are different domains, so
+    # browser cookies set by the backend are never sent to the frontend.
+    if "session_id" in st.query_params:
+        st.session_state.prismai_session_id = st.query_params["session_id"]
+        # Remove it from the visible URL so it isn't kept in browser history
+        # or re-sent on every refresh.
+        st.query_params.clear()
 
 def check_login_status():
     """
-    Calls the backend /auth/me endpoint, forwarding the browser's HttpOnly
-    session cookie so FastAPI can resolve who's logged in.
+    Calls the backend /auth/me endpoint, explicitly forwarding the session_id
+    captured from the OAuth redirect as a cookie value. This is a server-to-
+    server request made by Streamlit's Python runtime (not the browser), so
+    it isn't subject to cross-domain cookie restrictions -- we just need to
+    supply the right cookie value ourselves instead of relying on the browser
+    to have it.
     """
+    session_id = st.session_state.get("prismai_session_id")
+    if not session_id:
+        st.session_state.github_user = None
+        return False
     try:
-        cookies = dict(st.context.cookies) if hasattr(st, "context") else {}
-        resp = requests.get(f"{BACKEND_URL}/auth/me", cookies=cookies, timeout=5)
+        resp = requests.get(
+            f"{BACKEND_URL}/auth/me",
+            cookies={"prismai_session": session_id},
+            timeout=5,
+        )
         if resp.status_code == 200:
             data = resp.json()
             if data.get("logged_in"):
@@ -525,10 +548,15 @@ def render_user_header_widget(theme: dict = None):
         """, unsafe_allow_html=True)
     with logout_col:
         if st.button("\u23fb", key="header_logout_btn", help=f"Logout ({u.get('login')})"):
+            session_id = st.session_state.get("prismai_session_id")
             try:
-                cookies = dict(st.context.cookies) if hasattr(st, "context") else {}
-                requests.post(f"{BACKEND_URL}/auth/logout", cookies=cookies)
+                if session_id:
+                    requests.post(
+                        f"{BACKEND_URL}/auth/logout",
+                        cookies={"prismai_session": session_id},
+                    )
             except Exception:
                 pass
             st.session_state.github_user = None
+            st.session_state.prismai_session_id = None
             st.rerun()
