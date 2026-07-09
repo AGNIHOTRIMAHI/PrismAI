@@ -575,21 +575,51 @@ with tab2:
                     cleaned = cleaned.replace("https://github.com/", "")
 
                 if "/" in cleaned and notify_email_input:
-                    owner, repo_name = cleaned.split("/", 1)
+                    owner_input, repo_input = cleaned.split("/", 1)
+
+                    # ── Resolve canonical casing via GitHub API before storing ──
+                    # GitHub's repo lookup is case-insensitive, but the response
+                    # always contains the *exact* casing GitHub uses internally —
+                    # which is also exactly what webhook payloads will send us
+                    # later. If we store whatever casing the user typed, a
+                    # mismatch here silently breaks db.get_repo_token() lookups
+                    # on every webhook delivery (case-sensitive DB comparisons).
+                    gh_resp = None
                     try:
-                        resp = requests.post(f"{BACKEND_URL}/repos/connect", json={
-                            "owner": owner,
-                            "repo": repo_name,
-                            "github_token": user_token,
-                            "notify_email": notify_email_input,
-                        })
-                        if resp.status_code == 200:
-                            st.success(f"🎉 Successfully connected {cleaned}!")
-                            st.rerun()
-                        else:
-                            st.error(f"Server Error ({resp.status_code}): {resp.text}")
+                        gh_resp = requests.get(
+                            f"https://api.github.com/repos/{owner_input}/{repo_input}",
+                            headers={"Authorization": f"token {user_token}"},
+                            timeout=10,
+                        )
                     except Exception as e:
-                        st.error(f"Backend Connection Failed: {e}")
+                        st.error(f"Couldn't reach GitHub to verify repo: {e}")
+
+                    if gh_resp is None:
+                        pass
+                    elif gh_resp.status_code != 200:
+                        st.error(
+                            f"❌ GitHub couldn't find '{owner_input}/{repo_input}' "
+                            f"({gh_resp.status_code}). Check the name and your token's access."
+                        )
+                    else:
+                        gh_data = gh_resp.json()
+                        owner = gh_data["owner"]["login"]   # canonical casing
+                        repo_name = gh_data["name"]         # canonical casing
+
+                        try:
+                            resp = requests.post(f"{BACKEND_URL}/repos/connect", json={
+                                "owner": owner,
+                                "repo": repo_name,
+                                "github_token": user_token,
+                                "notify_email": notify_email_input,
+                            })
+                            if resp.status_code == 200:
+                                st.success(f"🎉 Successfully connected {owner}/{repo_name}!")
+                                st.rerun()
+                            else:
+                                st.error(f"Server Error ({resp.status_code}): {resp.text}")
+                        except Exception as e:
+                            st.error(f"Backend Connection Failed: {e}")
                 elif not notify_email_input:
                     st.warning("⚠️ Please enter a notification email first.")
                 else:
