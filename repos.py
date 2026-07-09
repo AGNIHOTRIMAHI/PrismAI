@@ -24,7 +24,7 @@ async def connect_repo(req: ConnectRepoRequest):
     webhook_url = os.environ["WEBHOOK_PUBLIC_URL"]  # e.g. https://your-app.onrender.com/webhook/github
 
     resp = requests.post(
-        resp=requests.post(f"https://api.github.com/repos/{req.owner}/{req.repo}/hooks",...),
+        f"https://api.github.com/repos/{req.owner}/{req.repo}/hooks",
         headers={"Authorization": f"token {req.github_token}"},
         json={
             "name": "web", "active": True, "events": ["pull_request"],
