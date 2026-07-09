@@ -30,7 +30,7 @@ class Settings(BaseSettings):
 
     # ── GitHub ────────────────────────────────────────────────────────────────
     github_token: str = Field(..., description="GitHub Personal Access Token")
-    github_webhook_secret: str = Field("default_secret", description="Webhook HMAC secret")
+    github_webhook_secret: str = Field(..., description="Webhook HMAC secret")
     webhook_public_url: str = Field("", description="Public URL GitHub sends webhook deliveries to") 
     # ── Tavily ────────────────────────────────────────────────────────────────
     tavily_api_key: str = Field(..., description="Tavily search API key")
