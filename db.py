@@ -6,17 +6,17 @@ stores per-thread graph state, not a queryable list across all runs.
 import sqlite3
 from datetime import datetime, timezone
 from typing import Optional
-
-DB_PATH = "prism_app.sqlite"
-
+import os
+#DB_PATH = "prism_app.sqlite"
+DB_PATH = os.getenv("DB_PATH", "prism_app.sqlite")
 def _conn():
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
-
+    #return sqlite3.connect(DB_PATH, check_same_thread=False)
+    return sqlite3.connect("prism_memory.sqlite", check_same_thread=False)
 def init_db():
     conn = _conn()
     conn.execute("""
         CREATE TABLE IF NOT EXISTS connected_repos (
-            owner TEXT, repo TEXT, webhook_id INTEGER, notify_email TEXT,
+            owner TEXT, repo TEXT, webhook_id INTEGER, notify_email TEXT,github_token TEXT,
             connected_at TEXT, PRIMARY KEY (owner, repo)
         )
     """)
@@ -40,7 +40,8 @@ def init_db():
     repo_cols = [r[1] for r in conn.execute("PRAGMA table_info(connected_repos)").fetchall()]
     if "notify_email" not in repo_cols:
         conn.execute("ALTER TABLE connected_repos ADD COLUMN notify_email TEXT")
-
+    if "github_token" not in repo_cols:
+        conn.execute("ALTER TABLE connected_repos ADD COLUMN github_token TEXT")
     run_cols = [r[1] for r in conn.execute("PRAGMA table_info(runs)").fetchall()]
     if "notify_email" not in run_cols:
         conn.execute("ALTER TABLE runs ADD COLUMN notify_email TEXT")
@@ -50,13 +51,21 @@ def init_db():
 
 # ── connected_repos ──────────────────────────────────────────────────────────
 
-def add_connected_repo(owner: str, repo: str, webhook_id: int, notify_email: str):
+def add_connected_repo(owner: str, repo: str, webhook_id: int, notify_email: str,github_token: str):
     conn = _conn()
     conn.execute(
-        "INSERT OR REPLACE INTO connected_repos (owner, repo, webhook_id, notify_email, connected_at) VALUES (?, ?, ?, ?, ?)",
-        (owner, repo, webhook_id, notify_email, datetime.now(timezone.utc).isoformat()),
+        "INSERT OR REPLACE INTO connected_repos (owner, repo, webhook_id, notify_email, github_token, connected_at) VALUES (?, ?, ?, ?, ?,?)",
+        (owner, repo, webhook_id, notify_email, github_token, datetime.now(timezone.utc).isoformat()),
     )
     conn.commit(); conn.close()
+
+def get_repo_token(owner: str, repo: str) -> Optional[str]:
+    conn = _conn()
+    row = conn.execute(
+        "SELECT github_token FROM connected_repos WHERE owner=? AND repo=?", (owner, repo)
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None
 
 def get_notify_email(owner, repo) -> Optional[str]:
     conn = _conn()

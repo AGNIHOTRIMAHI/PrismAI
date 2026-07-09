@@ -15,7 +15,7 @@ load_dotenv()  # only affects LOCAL runs — Streamlit Cloud ignores this and us
 # - On Streamlit Cloud: set BACKEND_URL under Settings -> Secrets to your real
 #   production Render URL. The fallback below is just a safety net in case that
 #   secret is ever missing in production — it should NOT be localhost.
-BACKEND_URL = os.getenv("BACKEND_URL", "https://prismai-backend-lhei.onrender.com")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://prismai-backend-nih2.onrender.com")
 print(f"[DEBUG] auth.py BACKEND_URL = {BACKEND_URL}")
 
 def init_auth_state():
