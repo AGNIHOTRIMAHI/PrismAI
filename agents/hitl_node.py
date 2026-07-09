@@ -18,10 +18,13 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from langchain_core.runnables import RunnableConfig
-
 from config import get_settings
 from state import HITLDecision, PRReviewState
 from utils.logger import get_logger
+import smtplib
+from email.mime.text import MIMEText
+import db 
+import smtplib
 
 log = get_logger("hitl_node")
 
@@ -107,11 +110,37 @@ def _notify_slack(state: PRReviewState) -> None:
         log.error("slack_notification_failed", error=str(exc))
         _notify_console(state)   # Fallback to console
 
+def _notify_email(state: PRReviewState) -> None:
+    settings = get_settings()
+    #to_email = state.get("notify_email") or settings.notify_email
+    to_email = state.get("notify_email") or settings.notify_email 
+    meta = state.get("pr_metadata", {})
+    subject = f"PrismAI: PR needs your review — {meta.get('title', state['pr_url'])}"
+    body = (
+        f"PrismAI paused for human review.\n\n"
+        f"PR: {state['pr_url']}\n"
+        f"Author: @{meta.get('author', 'N/A')}\n"
+        f"Security score: {state.get('security_score', 0)}/10\n\n"
+        f"This run stays paused until approved or rejected."
+    )
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = settings.smtp_user
+    msg["To"] = to_email
+    try:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+            server.starttls()
+            server.login(settings.smtp_user, settings.smtp_pass)
+            server.send_message(msg)
+        log.info("email_notification_sent", to=settings.notify_email)
+    except Exception as exc:
+        log.error("email_notification_failed", error=str(exc))
+        _notify_console(state)
 
 def _send_hitl_notification(state: PRReviewState) -> None:
     settings = get_settings()
     channel = settings.hitl_notification_channel
-    dispatch = {"slack": _notify_slack, "console": _notify_console}
+    dispatch = {"slack": _notify_slack, "console": _notify_console, "email": _notify_email}
     dispatch.get(channel, _notify_console)(state)
 
 
@@ -119,7 +148,7 @@ def _send_hitl_notification(state: PRReviewState) -> None:
 # LangGraph Nodes
 # ══════════════════════════════════════════════════════════════════════════════
 
-def hitl_notify_node(state: PRReviewState) -> PRReviewState:
+def hitl_notify_node(state: PRReviewState, config: RunnableConfig) -> PRReviewState:
     """
     LangGraph Node: Send HITL notification.
 
@@ -129,7 +158,8 @@ def hitl_notify_node(state: PRReviewState) -> PRReviewState:
     """
     log.info("hitl_notify_started", security_score=state.get("security_score"))
     _send_hitl_notification(state)
-
+    thread_id = config["configurable"]["thread_id"]
+    db.update_run_status(thread_id, "awaiting_approval")  
     return {
         **state,
         "awaiting_human": True,

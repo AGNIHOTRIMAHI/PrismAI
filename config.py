@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     # ── GitHub ────────────────────────────────────────────────────────────────
     github_token: str = Field(..., description="GitHub Personal Access Token")
     github_webhook_secret: str = Field("default_secret", description="Webhook HMAC secret")
-
+    webhook_public_url: str = Field("", description="Public URL GitHub sends webhook deliveries to") 
     # ── Tavily ────────────────────────────────────────────────────────────────
     tavily_api_key: str = Field(..., description="Tavily search API key")
 
@@ -43,7 +43,14 @@ class Settings(BaseSettings):
     slack_bot_token: str = Field("", description="Slack bot token for HITL")
     slack_review_channel_id: str = Field("", description="Slack channel for reviews")
     hitl_approval_timeout_seconds: int = Field(300, ge=30)
-
+    
+    # ── Email (HITL notifications) ───────────────────────────────────────────  ← ADD THIS WHOLE BLOCK
+    smtp_host: str = Field("smtp.gmail.com", description="SMTP server host")
+    smtp_port: int = Field(587, ge=1, le=65535)
+    smtp_user: str = Field("", description="SMTP login/from address")
+    smtp_pass: str = Field("", description="SMTP app password")
+    notify_email: str = Field("", description="Address to notify for HITL review")
+    
     # ── Server ────────────────────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = Field(8000, ge=1, le=65535)

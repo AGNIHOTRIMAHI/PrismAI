@@ -23,9 +23,13 @@ from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from state import PRReviewState
+from config import get_settings
 from datetime import datetime, timezone
 from graph import pr_review_graph as graph
 from repo_chat import answer_repo_question
+import db
+from webhook import router as webhook_router
+from repos import router as repos_router
 # load_dotenv(override=True)
 
 
@@ -54,6 +58,10 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 app = FastAPI(title="PrismAI Review Backend")
+
+db.init_db()
+app.include_router(webhook_router)
+app.include_router(repos_router) 
 
 app.add_middleware(
     CORSMiddleware,
@@ -144,7 +152,7 @@ async def github_login():
         "https://github.com/login/oauth/authorize"
         f"?client_id={GITHUB_CLIENT_ID}"
         f"&redirect_uri={OAUTH_REDIRECT_URI}"
-        f"&scope=repo read:user"
+        f"&scope=repo read:user user:email"
         f"&state={state}"
     )
     return RedirectResponse(github_authorize_url)
@@ -184,7 +192,19 @@ async def github_callback(code: str, state: str):
         timeout=10,
     )
     user_data = user_resp.json() if user_resp.status_code == 200 else {}
- 
+    
+    email_resp = requests.get(
+        "https://api.github.com/user/emails",
+        headers={"Authorization": f"token {access_token}"},
+        timeout=10,
+    )
+    primary_email = None
+    if email_resp.status_code == 200:
+      for e in email_resp.json():
+         if e.get("primary") and e.get("verified"):
+             primary_email = e["email"]
+             break
+
     # Create a server-side session
     session_id = secrets.token_urlsafe(32)
     SESSIONS[session_id] = {
@@ -193,6 +213,7 @@ async def github_callback(code: str, state: str):
             "login": user_data.get("login"),
             "avatar_url": user_data.get("avatar_url"),
             "name": user_data.get("name"),
+            "email": primary_email,
         },
     }
  
@@ -255,6 +276,11 @@ def get_session_token(request: Request) -> Optional[str]:
     session = SESSIONS.get(session_id) if session_id else None
     return session.get("access_token") if session else None
 
+def get_session_email(request: Request) -> Optional[str]:
+    session_id = request.cookies.get(SESSION_COOKIE_NAME)
+    session = SESSIONS.get(session_id) if session_id else None
+    return session.get("user", {}).get("email") if session else None
+
 # -----------------------------------------------------------------------------
 class ReviewRequest(BaseModel):
     pr_url:    str
@@ -272,10 +298,13 @@ class ApprovalRequest(BaseModel):
 # 3. ENDPOINTS
 # -----------------------------------------------------------------------------
 @app.post("/review")
-async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
+async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks, request: Request):
     log.info("=== NEW REVIEW REQUEST  thread=%s  url=%s ===", req.thread_id, req.pr_url)
-
-    
+    ...
+    notify_email = get_session_email(request) or get_settings().notify_email
+    parts = req.pr_url.strip().rstrip("/").split("github.com/")[1].split("/")
+    owner, repo, pr_number = parts[0], parts[1], int(parts[3])
+    db.create_run(req.thread_id, req.pr_url, owner, repo, pr_number, trigger_source="manual")
     #config = {"configurable": {"thread_id": req.thread_id}}
     config = {
     "configurable": {"thread_id": req.thread_id},
@@ -287,6 +316,7 @@ async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
         
         "pr_url":     req.pr_url,
         "github_token": req.github_token,
+        "notify_email": notify_email,
     }
 
     log.info("Offloading LangGraph pipeline to background worker...")
@@ -294,6 +324,11 @@ async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
     background_tasks.add_task(graph.invoke, initial_state, config)
     
     return {"status": "pipeline_started"}
+
+# ── NEW endpoint for the dashboard badge ──
+@app.get("/pending-approvals")
+async def pending_approvals():
+    return {"pending": db.list_pending_runs()}
 
 
 @app.get("/state/{thread_id}")
@@ -349,6 +384,10 @@ async def approve_pipeline(req: ApprovalRequest, request: Request):
     }
    }, as_node="human_review_interrupt")
     graph.invoke(None, config)
+
+    db.update_run_status(req.thread_id, "approved" if req.approved else "rejected") 
+
+
     state_info = graph.get_state(config)
     final_report = state_info.values.get("final_report_markdown", "")
     if final_report and req.pr_url:
