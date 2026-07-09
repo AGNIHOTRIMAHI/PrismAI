@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()  # ← must come before anything that reads env vars
 import os
+import chat_store
 
 # ── TEMPORARY: verify LangSmith env vars loaded correctly ──────────────────
 print("LangSmith tracing enabled:", os.getenv("LANGSMITH_TRACING"))
@@ -17,7 +18,6 @@ import logging
 import requests
 import secrets
 from typing import Optional
-from dotenv import load_dotenv
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi import FastAPI, Request, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +26,6 @@ from state import PRReviewState
 from datetime import datetime, timezone
 from graph import pr_review_graph as graph
 from repo_chat import answer_repo_question
-# load_dotenv(override=True)
 
 
 class ChatRequest(BaseModel):
@@ -35,9 +34,7 @@ class ChatRequest(BaseModel):
     history: list[list[str]] = []
     github_token: Optional[str] = None
     thread_id: Optional[str] = None
-
-
-
+    github_user: Optional[str] = None
 
 
 # -----------------------------------------------------------------------------
@@ -66,7 +63,7 @@ app.add_middleware(
 # -----------------------------------------------------------------------------
 # 0. GITHUB DIFF FETCHING & POSTING
 # -----------------------------------------------------------------------------
-def fetch_github_diff(pr_url: str,token: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
+def fetch_github_diff(pr_url: str, token: Optional[str] = None) -> tuple[Optional[str], Optional[str]]:
     clean_url = pr_url.strip().rstrip("/")
     if not clean_url.startswith("https://github.com/"):
         return None, "Invalid URL. Provide a valid GitHub Pull Request link."
@@ -94,7 +91,7 @@ def fetch_github_diff(pr_url: str,token: Optional[str] = None) -> tuple[Optional
         return None, f"Connection error: {str(e)}"
 
 
-def post_github_comment(pr_url: str, body: str,token: Optional[str] = None) -> tuple[bool, str]:
+def post_github_comment(pr_url: str, body: str, token: Optional[str] = None) -> tuple[bool, str]:
     active_token = token or GITHUB_TOKEN
     if not active_token:
         return False, "No GitHub token available to post comment."
@@ -123,15 +120,15 @@ GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
 OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI")        # e.g. https://your-backend/auth/github/callback
 FRONTEND_URL = os.getenv("FRONTEND_URL")                    # e.g. https://your-streamlit-app.streamlit.app
 COOKIE_SECURE = os.getenv("COOKIE_SECURE", "true").lower() == "true"  # False only for local http testing
- 
+
 # In-memory session store: { session_id: {"access_token": ..., "user": {...}} }
 # Swap this for Redis in production — in-memory won't survive a server restart
 # or work across multiple backend instances.
 SESSIONS: dict[str, dict] = {}
- 
+
 SESSION_COOKIE_NAME = "prismai_session"
- 
- 
+
+
 # -----------------------------------------------------------------------------
 # 1. KICK OFF LOGIN — Streamlit links/redirects the browser here
 # -----------------------------------------------------------------------------
@@ -139,7 +136,7 @@ SESSION_COOKIE_NAME = "prismai_session"
 async def github_login():
     state = secrets.token_urlsafe(16)  # CSRF protection
     SESSIONS[f"state_{state}"] = {"pending": True}
- 
+
     github_authorize_url = (
         "https://github.com/login/oauth/authorize"
         f"?client_id={GITHUB_CLIENT_ID}"
@@ -148,8 +145,8 @@ async def github_login():
         f"&state={state}"
     )
     return RedirectResponse(github_authorize_url)
- 
- 
+
+
 # -----------------------------------------------------------------------------
 # 2. GITHUB REDIRECTS BACK HERE WITH ?code=...&state=...
 # -----------------------------------------------------------------------------
@@ -157,7 +154,7 @@ async def github_login():
 async def github_callback(code: str, state: str):
     if SESSIONS.pop(f"state_{state}", None) is None:
         return JSONResponse({"error": "Invalid OAuth state"}, status_code=400)
- 
+
     # Exchange code for access token
     token_resp = requests.post(
         "https://github.com/login/oauth/access_token",
@@ -172,11 +169,11 @@ async def github_callback(code: str, state: str):
     )
     token_data = token_resp.json()
     access_token = token_data.get("access_token")
- 
+
     if not access_token:
         log.error("GitHub OAuth token exchange failed: %s", token_data)
         return RedirectResponse(f"{FRONTEND_URL}?auth_error=1")
- 
+
     # Fetch user profile
     user_resp = requests.get(
         "https://api.github.com/user",
@@ -184,7 +181,7 @@ async def github_callback(code: str, state: str):
         timeout=10,
     )
     user_data = user_resp.json() if user_resp.status_code == 200 else {}
- 
+
     # Create a server-side session
     session_id = secrets.token_urlsafe(32)
     SESSIONS[session_id] = {
@@ -195,11 +192,10 @@ async def github_callback(code: str, state: str):
             "name": user_data.get("name"),
         },
     }
- 
+
     log.info("OAuth login success for user: %s", user_data.get("login"))
- 
+
     # Redirect back to the Streamlit frontend, set HttpOnly cookie
-    #response = RedirectResponse(FRONTEND_URL)
     response = RedirectResponse(f"{FRONTEND_URL}?session_id={session_id}")
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -210,8 +206,8 @@ async def github_callback(code: str, state: str):
         max_age=60 * 60 * 24 * 7,  # 7 days
     )
     return response
- 
- 
+
+
 # -----------------------------------------------------------------------------
 # 3. STREAMLIT CALLS THIS ON EVERY LOAD TO CHECK LOGIN STATE
 # -----------------------------------------------------------------------------
@@ -219,13 +215,13 @@ async def github_callback(code: str, state: str):
 async def auth_me(request: Request):
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     session = SESSIONS.get(session_id) if session_id else None
- 
+
     if not session or "user" not in session:
         return {"logged_in": False, "user": None}
- 
+
     return {"logged_in": True, "user": session["user"]}
- 
- 
+
+
 # -----------------------------------------------------------------------------
 # 4. LOGOUT
 # -----------------------------------------------------------------------------
@@ -234,18 +230,12 @@ async def auth_logout(request: Request):
     session_id = request.cookies.get(SESSION_COOKIE_NAME)
     if session_id:
         SESSIONS.pop(session_id, None)
- 
+
     response = JSONResponse({"status": "logged_out"})
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
 
-class RepoChatRequest(BaseModel):
-    repo_url: str
-    question: str
-    history: list[list[str]] = []
-    github_token: Optional[str] = None
-    thread_id: Optional[str] = None 
- 
+
 # -----------------------------------------------------------------------------
 # HELPER: pull the logged-in user's GitHub token server-side, e.g. inside
 # /review, so PRs are fetched using THEIR permissions instead of a shared PAT
@@ -275,24 +265,20 @@ class ApprovalRequest(BaseModel):
 async def start_review(req: ReviewRequest, background_tasks: BackgroundTasks):
     log.info("=== NEW REVIEW REQUEST  thread=%s  url=%s ===", req.thread_id, req.pr_url)
 
-    
-    #config = {"configurable": {"thread_id": req.thread_id}}
     config = {
-    "configurable": {"thread_id": req.thread_id},
-    "run_name": f"pr_review::{req.pr_url.split('/')[-1]}",
-    "tags": ["pr-review", "background"],
-    "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id},
-   }
+        "configurable": {"thread_id": req.thread_id},
+        "run_name": f"pr_review::{req.pr_url.split('/')[-1]}",
+        "tags": ["pr-review", "background"],
+        "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id},
+    }
     initial_state = {
-        
         "pr_url":     req.pr_url,
         "github_token": req.github_token,
     }
 
     log.info("Offloading LangGraph pipeline to background worker...")
-    # FIX 2: Run the graph in the background so the server doesn't freeze!
     background_tasks.add_task(graph.invoke, initial_state, config)
-    
+
     return {"status": "pipeline_started"}
 
 
@@ -302,24 +288,23 @@ async def get_state(thread_id: str):
     state_info = graph.get_state(config)
     if not state_info or not state_info.values:
         return {"values": {}, "waiting_for_human": False, "done": False}
- 
+
     values = state_info.values
     next_nodes = set(state_info.next) if state_info.next else set()
- 
+
     is_at_hitl_interrupt = "human_review_interrupt" in next_nodes
     agents_fully_done = (
         "security_report"       in values and
         "crag_enhanced_context" in values
     )
- 
+
     waiting_for_human = is_at_hitl_interrupt and agents_fully_done
-    #Graph is done when: no next nodes, has final output, not waiting for human
     done = (
         not state_info.next
         and not waiting_for_human
         and bool(values.get("final_report_markdown"))
     )
- 
+
     return {
         "values":            values,
         "waiting_for_human": waiting_for_human,
@@ -329,25 +314,23 @@ async def get_state(thread_id: str):
 @app.post("/approve")
 async def approve_pipeline(req: ApprovalRequest, request: Request):
     log.info("=== APPROVAL  thread=%s  approved=%s ===", req.thread_id, req.approved)
-    #config = {"configurable": {"thread_id": req.thread_id}}
 
-    # WITH THIS
     config = {
-    "configurable": {"thread_id": req.thread_id},
-    "run_name": f"pr_review_resume::{req.thread_id[:8]}",
-    "tags": ["pr-review", "hitl-resume"],
-    "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id, "approved": req.approved},
+        "configurable": {"thread_id": req.thread_id},
+        "run_name": f"pr_review_resume::{req.thread_id[:8]}",
+        "tags": ["pr-review", "hitl-resume"],
+        "metadata": {"pr_url": req.pr_url, "thread_id": req.thread_id, "approved": req.approved},
     }
-    session_token = get_session_token(request) 
+    session_token = get_session_token(request)
     active_token  = session_token or req.user_token or os.getenv("GITHUB_TOKEN")
     graph.update_state(config, {
-    "hitl_decision": {
-        "reviewer":  "senior_engineer",
-        "decision":  "approve" if req.approved else "request_changes",
-        "comment":   "Approved via PrismAI HITL gate." if req.approved else "Changes requested via PrismAI HITL gate.",
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-    }
-   }, as_node="human_review_interrupt")
+        "hitl_decision": {
+            "reviewer":  "senior_engineer",
+            "decision":  "approve" if req.approved else "request_changes",
+            "comment":   "Approved via PrismAI HITL gate." if req.approved else "Changes requested via PrismAI HITL gate.",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    }, as_node="human_review_interrupt")
     graph.invoke(None, config)
     state_info = graph.get_state(config)
     final_report = state_info.values.get("final_report_markdown", "")
@@ -355,10 +338,11 @@ async def approve_pipeline(req: ApprovalRequest, request: Request):
         success, msg = post_github_comment(
             pr_url=req.pr_url,
             body=final_report,
-            token=active_token,  # Using the prioritized token
+            token=active_token,
         )
         log.info("GitHub comment posted: %s — %s", success, msg)
     return {"status": "done", "approved": req.approved}
+
 
 @app.post("/chat/repo")
 async def chat_repo(req: ChatRequest):
@@ -368,8 +352,17 @@ async def chat_repo(req: ChatRequest):
         history=req.history,
         token=req.github_token,
         thread_id=req.thread_id,
+        github_user=req.github_user,
     )
     return result
+
+@app.get("/chat/threads")
+def list_chat_threads(repo_url: str, github_user: Optional[str] = None):
+    return chat_store.list_sessions(repo_url, github_user)
+
+@app.get("/chat/history/{thread_id}")
+def get_chat_history(thread_id: str):
+    return chat_store.get_history(thread_id)
 
 
 if __name__ == "__main__":
