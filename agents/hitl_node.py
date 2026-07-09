@@ -132,16 +132,20 @@ def _notify_email(state: PRReviewState) -> None:
             server.starttls()
             server.login(settings.smtp_user, settings.smtp_pass)
             server.send_message(msg)
-        log.info("email_notification_sent", to=settings.notify_email)
+        log.info("email_notification_sent", to=to_email)
     except Exception as exc:
         log.error("email_notification_failed", error=str(exc))
-        _notify_console(state)
 
 def _send_hitl_notification(state: PRReviewState) -> None:
+    """Always notify via console + email. Slack stays available as an extra
+    channel on top of those two, if explicitly configured."""
     settings = get_settings()
-    channel = settings.hitl_notification_channel
-    dispatch = {"slack": _notify_slack, "console": _notify_console, "email": _notify_email}
-    dispatch.get(channel, _notify_console)(state)
+
+    _notify_console(state)
+    _notify_email(state)
+
+    if settings.hitl_notification_channel == "slack":
+        _notify_slack(state)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
