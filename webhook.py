@@ -20,6 +20,7 @@ def _verify_signature(payload_body: bytes, signature_header: str) -> bool:
 
 @router.post("/webhook/github")
 async def github_webhook(request: Request, background_tasks: BackgroundTasks):
+    settings = get_settings()
     body = await request.body()
     signature = request.headers.get("X-Hub-Signature-256", "")
     if not _verify_signature(body, signature):
@@ -40,11 +41,14 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
 
     if db.already_processed(owner, repo, pr_number, sha):
         return {"status": "skipped", "reason": "already processed"}
+    #notify_email = db.get_notify_email(owner, repo)
     db.mark_processed(owner, repo, pr_number, sha)
 
     import uuid
     thread_id = str(uuid.uuid4())
-    db.create_run(thread_id, pr_url, owner, repo, pr_number, trigger_source="webhook")
+    notify_email = db.get_notify_email(owner, repo)
+    repo_token = db.get_repo_token(owner, repo)
+    db.create_run(thread_id, pr_url, owner, repo, pr_number, trigger_source="webhook", notify_email=notify_email)
 
     config = {
         "configurable": {"thread_id": thread_id},
@@ -52,7 +56,7 @@ async def github_webhook(request: Request, background_tasks: BackgroundTasks):
         "tags": ["pr-review", "webhook"],
         "metadata": {"pr_url": pr_url, "thread_id": thread_id},
     }
-    initial_state = {"pr_url": pr_url, "github_token": None}
+    initial_state = {"pr_url": pr_url, "github_token": repo_token, "notify_email": notify_email}
     background_tasks.add_task(graph.invoke, initial_state, config)
 
     return {"status": "accepted", "thread_id": thread_id}

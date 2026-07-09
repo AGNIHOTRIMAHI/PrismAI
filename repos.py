@@ -21,8 +21,12 @@ class ConnectRepoRequest(BaseModel):
 @router.post("/repos/connect")
 async def connect_repo(req: ConnectRepoRequest):
     settings = get_settings()
-    webhook_url = os.environ["WEBHOOK_PUBLIC_URL"]  # e.g. https://your-app.onrender.com/webhook/github
-
+   # webhook_url = os.environ["WEBHOOK_PUBLIC_URL"]  # e.g. https://your-app.onrender.com/webhook/github
+    base_url = settings.webhook_public_url.rstrip("/")
+    if not base_url:
+        raise HTTPException(500, "webhook_public_url is not configured in .env")
+    # 2. Automatically append the exact route path
+    webhook_url = f"{base_url}/webhook/github"
     resp = requests.post(
         f"https://api.github.com/repos/{req.owner}/{req.repo}/hooks",
         headers={"Authorization": f"token {req.github_token}"},
@@ -38,7 +42,7 @@ async def connect_repo(req: ConnectRepoRequest):
         raise HTTPException(resp.status_code, f"GitHub rejected webhook creation: {resp.text}")
 
     webhook_id = resp.json()["id"]
-    db.add_connected_repo(req.owner, req.repo, webhook_id, notify_email=req.notify_email)
+    db.add_connected_repo(req.owner, req.repo, webhook_id, notify_email=req.notify_email,github_token=req.github_token)
     return {"status": "connected", "webhook_id": webhook_id}
 
 class DisconnectRepoRequest(BaseModel):
