@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # ── LLM (Gemini) ──────────────────────────────────────────────────────────
     google_api_key: str = Field(..., description="Google AI API key")
-    google_model: str = Field("gemini-2.5-flash", description="Gemini model for agents")
+    google_model: str = Field("gemini-1.5-flash", description="Gemini model for agents")
     google_temperature: float = Field(0.1, ge=0.0, le=2.0)
     # ✅
     google_embedding_model: str = Field(
