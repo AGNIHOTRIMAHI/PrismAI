@@ -73,7 +73,8 @@ class PRReviewState(TypedDict, total=False):
     pr_url: str     
     github_token: Optional[str]                     # Canonical PR URL
     pr_metadata: PRMetadata              # Structured PR info
-
+    trigger_source: Optional[str] 
+    notify_email: Optional[str]
     # ── Fetched Content ───────────────────────────────────────────────────────
     diff_context: str                    # Raw unified diff text
     diff_chunks: List[str]               # Chunked diff for large PRs

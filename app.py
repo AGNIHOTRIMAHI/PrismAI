@@ -178,6 +178,12 @@ st.markdown(f"""
         0%   {{ transform:scale(0) translate(0,0); opacity:1; }}
         100% {{ transform:scale(1) translate(var(--tx),var(--ty)); opacity:0; }}
     }}
+    .repo-row {{
+        display:flex; justify-content:space-between; align-items:center;
+        padding:8px 12px; border-radius:6px; margin-bottom:6px;
+        background:{panel_bg}; border:1px solid {border_color};
+        font-family:'Courier New',monospace; font-size:13px;
+    }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -377,7 +383,6 @@ def infer_stage(values: dict) -> int:
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
 
-
 # -----------------------------------------------------------------------------
 # 4. AUTH GATE
 # -----------------------------------------------------------------------------
@@ -394,6 +399,14 @@ if not is_logged_in():
 
 with st.sidebar:
     render_user_header_widget({"border_color": border_color, "text_color": text_color})
+    st.markdown("---")
+    st.markdown("### 🔑 Authentication")
+    user_token = st.text_input(
+        "GitHub Token (Global)",
+        type="password", 
+        placeholder="ghp_...",
+        help="Required for private repos and setting up webhooks."
+    )
 
 # -----------------------------------------------------------------------------
 # 5. ICON LOADING
@@ -419,6 +432,11 @@ if "phase"              not in st.session_state: st.session_state.phase         
 if "thread_id"          not in st.session_state: st.session_state.thread_id          = str(uuid.uuid4())
 if "graph_state"        not in st.session_state: st.session_state.graph_state        = {}
 if "show_success_popup" not in st.session_state: st.session_state.show_success_popup = False
+# Tracks the PR URL for whichever run is currently loaded (manual OR webhook-triggered).
+# The old code reused the Tab-1 text input's value everywhere, which broke as soon as
+# a webhook-triggered run (with no text input at all) needed to be reviewed/approved.
+if "active_pr_url"      not in st.session_state: st.session_state.active_pr_url      = ""
+if "active_repo_label"  not in st.session_state: st.session_state.active_repo_label  = ""
 
 # -----------------------------------------------------------------------------
 # 7. HEADER
@@ -439,44 +457,187 @@ with head_col2:
         st.rerun()
 
 # -----------------------------------------------------------------------------
+# 7b. PENDING APPROVALS — auto-refreshes on its own, no manual reload needed
+# -----------------------------------------------------------------------------
+@st.fragment(run_every=10)
+def render_pending_approvals():
+    try:
+        pending_res = requests.get(f"{BACKEND_URL}/pending-approvals", timeout=5)
+        pending = pending_res.json().get("pending", []) if pending_res.status_code == 200 else []
+    except Exception:
+        pending = []
+
+    if not pending:
+        return
+
+    header_col, refresh_col = st.columns([6, 1])
+    with header_col:
+        st.markdown(f"""
+        <div style="background:{panel_bg};border:1px solid #f59e0b;border-radius:8px;
+                    padding:10px 14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:#fbbf24;font-weight:600;">⚠️ {len(pending)} run(s) awaiting your review</span>
+        </div>
+        """, unsafe_allow_html=True)
+    with refresh_col:
+        if st.button("🔄", key="manual_refresh_pending", help="Check now instead of waiting for the auto-refresh"):
+            st.rerun(scope="fragment")
+
+    with st.expander("View pending approvals", expanded=(st.session_state.phase == "idle")):
+        for run in pending:
+            row_col1, row_col2 = st.columns([5, 1])
+            with row_col1:
+                badge = "🪝 webhook" if run["trigger_source"] == "webhook" else "✋ manual"
+                st.markdown(
+                    f"**{run['owner']}/{run['repo']}** PR #{run['pr_number']} · "
+                    f"`{badge}` · updated {run['updated_at']}"
+                )
+            with row_col2:
+                if st.button("Review →", key=f"review_{run['thread_id']}", use_container_width=True):
+                    # Load THIS run's thread — not whatever's in the manual-review text box.
+                    st.session_state.thread_id = run["thread_id"]
+                    st.session_state.active_pr_url = run["pr_url"]
+                    st.session_state.active_repo_label = f"{run['owner']}/{run['repo']} #{run['pr_number']}"
+                    st.session_state.graph_state = {}
+                    st.session_state.show_success_popup = False
+                    # Route through "polling" so the app fetches fresh state and
+                    # naturally lands on the HITL screen once it confirms the run
+                    # is actually waiting (rather than assuming it still is).
+                    st.session_state.phase = "polling"
+                    st.rerun()
+
+render_pending_approvals()
+
+# -----------------------------------------------------------------------------
 # 8. INPUT FORM
 # -----------------------------------------------------------------------------
-with st.container(border=True):
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        pr_url = st.text_input(
-            "GitHub PR URL",
-            value="https://github.com/ABC/PrismAI/pull/1",
-            label_visibility="collapsed",
-        )
-        user_token = st.text_input(
-            "GitHub Token (Optional for Private Repos)",
-            type="password", placeholder="ghp_...",
-        )
-    with col2:
-        st.write("")
-        if st.button("🚀 Run Graph", use_container_width=True, type="primary"):
-            st.session_state.thread_id          = str(uuid.uuid4())
-            st.session_state.graph_state        = {}
-            st.session_state.show_success_popup = False
-            try:
-                res = requests.post(f"{BACKEND_URL}/review", json={
-                    "pr_url": pr_url,
-                    "thread_id": st.session_state.thread_id,
-                    "github_token": user_token,
-                })
-                if res.status_code == 200:
-                    st.session_state.phase = "polling"
+tab1, tab2 = st.tabs(["🔍 Single PR Review", "⚡ Automated Webhooks"])
+
+# --- TAB 1: SINGLE PR REVIEW ---
+with tab1:
+    st.markdown("### Review an Individual Pull Request")
+    with st.container(border=True):
+        col1, col2 = st.columns([4, 1])
+        with col1:
+            pr_url = st.text_input(
+                "GitHub PR URL",
+                value="https://github.com/ABC/PrismAI/pull/1",
+                label_visibility="collapsed",
+            )
+        with col2:
+            st.write("") # Alignment spacing
+            if st.button("🚀 Run Graph", use_container_width=True, type="primary"):
+                st.session_state.thread_id          = str(uuid.uuid4())
+                st.session_state.graph_state        = {}
+                st.session_state.show_success_popup = False
+                st.session_state.active_pr_url      = pr_url
+                st.session_state.active_repo_label  = pr_url
+                try:
+                    res = requests.post(f"{BACKEND_URL}/review", json={
+                        "pr_url": pr_url,
+                        "thread_id": st.session_state.thread_id,
+                        "github_token": user_token,
+                    })
+                    if res.status_code == 200:
+                        st.session_state.phase = "polling"
+                    else:
+                        st.error(f"Backend Error: {res.text}")
+                except Exception as e:
+                    st.error(f"Connection Failed: {e}")
+                st.rerun()
+
+# --- TAB 2: CONNECT REPO (Webhook & HITL Email) ---
+with tab2:
+    st.markdown("### 🔗 Connect Repository for Auto-Review")
+    st.caption(
+        "Once connected, every new or updated PR on this repo automatically runs "
+        "through the pipeline — no need to paste links. You'll see it appear under "
+        "**pending approvals** above when it reaches the HITL gate."
+    )
+    with st.container(border=True):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            new_repo = st.text_input("Repository", placeholder="ABC/PrismAI", key="connect_repo_input")
+        with col_b:
+            notify_email_input = st.text_input(
+                "Notify Email (for HITL alerts)",
+                placeholder="prismai@example.com",
+                key="connect_notify_email",
+            )
+
+        st.markdown("<br>", unsafe_allow_html=True)
+
+        if st.button("🔌 Connect Repository", use_container_width=True):
+            if not user_token:
+                st.error("❌ Authentication Missing: Please provide your GitHub Token in the sidebar.")
+            else:
+                cleaned = new_repo.strip().rstrip("/")
+                if cleaned.startswith("https://github.com/"):
+                    cleaned = cleaned.replace("https://github.com/", "")
+
+                if "/" in cleaned and notify_email_input:
+                    owner, repo_name = cleaned.split("/", 1)
+                    try:
+                        resp = requests.post(f"{BACKEND_URL}/repos/connect", json={
+                            "owner": owner,
+                            "repo": repo_name,
+                            "github_token": user_token,
+                            "notify_email": notify_email_input,
+                        })
+                        if resp.status_code == 200:
+                            st.success(f"🎉 Successfully connected {cleaned}!")
+                            st.rerun()
+                        else:
+                            st.error(f"Server Error ({resp.status_code}): {resp.text}")
+                    except Exception as e:
+                        st.error(f"Backend Connection Failed: {e}")
+                elif not notify_email_input:
+                    st.warning("⚠️ Please enter a notification email first.")
                 else:
-                    st.error(f"Backend Error: {res.text}")
-            except Exception as e:
-                st.error(f"Connection Failed: {e}")
-            st.rerun()
+                    st.warning("⚠️ Format must be owner/repo (e.g. YashChauhan/InkNest).")
+
+    # --- Connected repos list, with disconnect ---
+    st.markdown("#### Connected Repositories")
+    try:
+        repos_res = requests.get(f"{BACKEND_URL}/repos", timeout=5)
+        connected_repos = repos_res.json().get("repos", []) if repos_res.status_code == 200 else []
+    except Exception:
+        connected_repos = []
+
+    if not connected_repos:
+        st.caption("No repositories connected yet.")
+    else:
+        for repo_entry in connected_repos:
+            r_col1, r_col2 = st.columns([5, 1])
+            with r_col1:
+                st.markdown(
+                    f"<div class='repo-row'>🔗 <b>{repo_entry['owner']}/{repo_entry['repo']}</b>"
+                    f"&nbsp;&nbsp;<span style='opacity:0.6;'>connected {repo_entry['connected_at']}</span></div>",
+                    unsafe_allow_html=True,
+                )
+            with r_col2:
+                if st.button("Disconnect", key=f"disconnect_{repo_entry['owner']}_{repo_entry['repo']}", use_container_width=True):
+                    if not user_token:
+                        st.error("❌ GitHub Token required in sidebar to disconnect (removes the webhook on GitHub).")
+                    else:
+                        try:
+                            d_resp = requests.post(f"{BACKEND_URL}/repos/disconnect", json={
+                                "owner": repo_entry["owner"],
+                                "repo": repo_entry["repo"],
+                                "github_token": user_token,
+                            })
+                            if d_resp.status_code == 200:
+                                st.success(f"Disconnected {repo_entry['owner']}/{repo_entry['repo']}")
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to disconnect: {d_resp.text}")
+                        except Exception as e:
+                            st.error(f"Backend Connection Failed: {e}")
 
 # =============================================================================
 # 9. PHASE ROUTER
 # =============================================================================
 phase = st.session_state.phase
+active_pr_url = st.session_state.active_pr_url or pr_url
 
 # ── POLLING ───────────────────────────────────────────────────────────────────
 if phase == "polling":
@@ -517,7 +678,7 @@ if phase == "polling":
         st.session_state.phase = "idle"
 
     render_chat_widget(icon_url=my_local_icon, backend_url=BACKEND_URL,
-        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=pr_url, github_token=user_token)
+        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=active_pr_url, github_token=user_token)
     st.stop()
 
 # ── RESUMING ──────────────────────────────────────────────────────────────────
@@ -545,7 +706,7 @@ elif phase == "resuming":
         st.session_state.phase = "hitl"
 
     render_chat_widget(icon_url=my_local_icon, backend_url=BACKEND_URL,
-        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=pr_url, github_token=user_token)
+        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=active_pr_url, github_token=user_token)
     st.stop()
 
 # ── HITL ──────────────────────────────────────────────────────────────────────
@@ -555,6 +716,8 @@ elif phase == "hitl":
 
     with col_left:
         st.markdown("### Pipeline State")
+        if st.session_state.active_repo_label:
+            st.caption(f"Reviewing: **{st.session_state.active_repo_label}**")
         st.markdown(f"<div class='pipe-step'>1. Fetcher Node {'✅' if 'diff_context' in values else '⏳'}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pipe-step'>2. Security & Style Agents {'✅' if 'security_report' in values else '⏳'}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pipe-step'>3. CRAG Evaluator {'✅' if 'crag_enhanced_context' in values else '⏳'}</div>", unsafe_allow_html=True)
@@ -568,6 +731,7 @@ elif phase == "hitl":
         st.error("Pipeline Paused: Awaiting Senior Engineer authorization.")
         with st.form("hitl_form"):
             st.markdown(f"**Thread ID:** `{st.session_state.thread_id}`")
+            st.markdown(f"**PR:** {active_pr_url}")
             decision = st.selectbox("Action", ["Approve Merge", "Reject / Drop Request"])
             reviewer = st.text_input("Reviewer ID", placeholder="e.g. ops-admin")
             if st.form_submit_button("Transmit Decision", type="primary", use_container_width=True):
@@ -580,8 +744,8 @@ elif phase == "hitl":
                             json={
                                 "thread_id": st.session_state.thread_id,
                                 "approved": decision == "Approve Merge",
-                                "pr_url":pr_url,
-                                "user_token":user_token,
+                                "pr_url": active_pr_url,
+                                "user_token": user_token,
                             },
                         )
                         if post_res.status_code == 200:
@@ -608,7 +772,7 @@ elif phase == "hitl":
                     st.markdown(values[key])
 
     render_chat_widget(icon_url=my_local_icon, backend_url=BACKEND_URL,
-        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=pr_url, github_token=user_token)
+        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=active_pr_url, github_token=user_token)
     st.stop()
 
 # ── DONE ──────────────────────────────────────────────────────────────────────
@@ -628,6 +792,8 @@ elif phase == "done":
     col_left, col_right = st.columns([1, 2])
     with col_left:
         st.markdown("### Pipeline State")
+        if st.session_state.active_repo_label:
+            st.caption(f"Reviewed: **{st.session_state.active_repo_label}**")
         st.markdown(f"<div class='pipe-step'>1. Fetcher Node {'✅' if 'diff_context' in values else '⏳'}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pipe-step'>2. Security & Style Agents {'✅' if 'security_report' in values else '⏳'}</div>", unsafe_allow_html=True)
         st.markdown(f"<div class='pipe-step'>3. CRAG Evaluator {'✅' if 'crag_enhanced_context' in values else '⏳'}</div>", unsafe_allow_html=True)
@@ -650,7 +816,7 @@ elif phase == "done":
                     st.markdown(values[key])
 
     render_chat_widget(icon_url=my_local_icon, backend_url=BACKEND_URL,
-        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=pr_url, github_token=user_token)
+        btn_bg=btn_bg, shadow_color=shadow_color, repo_url=active_pr_url, github_token=user_token)
     st.stop()
 
 # ── IDLE ──────────────────────────────────────────────────────────────────────
