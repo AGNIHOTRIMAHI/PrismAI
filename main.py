@@ -390,6 +390,8 @@ async def approve_pipeline(req: ApprovalRequest, request: Request):
 
     state_info = graph.get_state(config)
     final_report = state_info.values.get("final_report_markdown", "")
+    comment_posted = None
+    comment_error = None
     if final_report and req.pr_url:
         success, msg = post_github_comment(
             pr_url=req.pr_url,
@@ -397,7 +399,12 @@ async def approve_pipeline(req: ApprovalRequest, request: Request):
             token=active_token,  # Using the prioritized token
         )
         log.info("GitHub comment posted: %s — %s", success, msg)
-    return {"status": "done", "approved": req.approved}
+        comment_posted = success
+        if not success:
+            comment_error = msg
+        
+    return {"status": "done", "approved": req.approved,"comment_posted": comment_posted,
+        "comment_error": comment_error,}
 
 @app.post("/chat/repo")
 async def chat_repo(req: ChatRequest):
