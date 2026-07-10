@@ -106,7 +106,8 @@ def aggregator_node(state: PRReviewState) -> PRReviewState:
     # ── Post to GitHub ─────────────────────────────────────────────────────────
     github_comment_id: int | None = None
     try:
-        client = get_github_client()
+        #client = get_github_client()
+        client = get_github_client(token=state.get("github_token"))
         existing_comment_id = state.get("github_comment_id")
         github_comment_id = client.post_review_comment(
             pr_url=state["pr_url"],
