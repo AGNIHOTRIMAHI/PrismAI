@@ -396,7 +396,8 @@ if not is_logged_in():
         "title_color": title_color, "btn_bg": btn_bg,
     })
     st.stop()
-
+if "persisted_github_token" not in st.session_state:
+    st.session_state.persisted_github_token = ""
 with st.sidebar:
     render_user_header_widget({"border_color": border_color, "text_color": text_color})
     st.markdown("---")
@@ -404,9 +405,14 @@ with st.sidebar:
     user_token = st.text_input(
         "GitHub Token (Global)",
         type="password", 
+        value=st.session_state.persisted_github_token,
         placeholder="ghp_...",
-        help="Required for private repos and setting up webhooks."
+        help="Required for private repos and setting up webhooks.",
+        key="global_token_widget",
     )
+    if user_token:
+        st.session_state.persisted_github_token = user_token
+    user_token = st.session_state.persisted_github_token
 
 # -----------------------------------------------------------------------------
 # 5. ICON LOADING
