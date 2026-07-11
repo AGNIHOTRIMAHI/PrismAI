@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()  # ← must come before anything that reads env vars
 import os
+import chat_store
 
 # ── TEMPORARY: verify LangSmith env vars loaded correctly ──────────────────
 print("LangSmith tracing enabled:", os.getenv("LANGSMITH_TRACING"))
@@ -39,8 +40,7 @@ class ChatRequest(BaseModel):
     history: list[list[str]] = []
     github_token: Optional[str] = None
     thread_id: Optional[str] = None
-
-
+    github_user: Optional[str] = None
 
 
 
@@ -55,7 +55,7 @@ logging.basicConfig(
 log = logging.getLogger("prism")
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY")
 
 app = FastAPI(title="PrismAI Review Backend")
 
@@ -406,6 +406,10 @@ async def approve_pipeline(req: ApprovalRequest, request: Request):
     return {"status": "done", "approved": req.approved,"comment_posted": comment_posted,
         "comment_error": comment_error,}
 
+
+
+
+
 @app.post("/chat/repo")
 async def chat_repo(req: ChatRequest):
     result = answer_repo_question(
@@ -414,8 +418,18 @@ async def chat_repo(req: ChatRequest):
         history=req.history,
         token=req.github_token,
         thread_id=req.thread_id,
+        github_user=req.github_user,
     )
     return result
+
+@app.get("/chat/threads")
+def list_chat_threads(repo_url: str, github_user: Optional[str] = None):
+    return chat_store.list_sessions(repo_url, github_user)
+
+@app.get("/chat/history/{thread_id}")
+def get_chat_history(thread_id: str):
+    return chat_store.get_history(thread_id)
+
 
 
 if __name__ == "__main__":

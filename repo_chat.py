@@ -17,8 +17,10 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
-from langgraph.checkpoint.memory import MemorySaver
+import sqlite3
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
+import chat_store
 
 log = logging.getLogger(__name__)
 
@@ -26,7 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GOOGLE_API_KEY_CHAT") or os.getenv("GOOGLE_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 GOOGLE_MODEL = os.getenv("GOOGLE_MODEL", "")
 RELEVANCE_THRESHOLD = 0.45
@@ -297,8 +299,12 @@ def _build_graph() -> Any:
     builder.add_edge("web_search", "generate")
     builder.add_edge("generate", END)
 
-    checkpointer = MemorySaver()
+    _checkpoint_path = os.path.join(os.path.dirname(__file__), "data", "langgraph_checkpoints.db")
+    os.makedirs(os.path.dirname(_checkpoint_path), exist_ok=True)
+    _conn = sqlite3.connect(_checkpoint_path, check_same_thread=False)
+    checkpointer = SqliteSaver(_conn)
     return builder.compile(checkpointer=checkpointer)
+
 
 
 _graph = _build_graph()
@@ -306,17 +312,15 @@ _graph = _build_graph()
 
 # ── Public interface (unchanged from original) ────────────────────────────────
 
+
 def answer_repo_question(
     repo_url: str,
     question: str,
     history: list[list[str]] | None = None,
     token: Optional[str] = None,
     thread_id: Optional[str] = None,
+    github_user: Optional[str] = None,   # NEW
 ) -> dict:
-    """
-    Entry point called by main.py's /chat/repo endpoint.
-    Returns: { answer, sources, crag_relevance_score, crag_triggered_web_search }
-    """
     if not thread_id:
         owner, repo = _parse_repo(repo_url)
         thread_id = f"repochat_{owner}_{repo}"
@@ -338,12 +342,16 @@ def answer_repo_question(
 
     try:
         final = _graph.invoke(initial_state, config=config)
-        return {
+        result = {
             "answer": final["answer"],
             "sources": final["sources"],
             "crag_relevance_score": round(final["relevance_score"], 3),
             "crag_triggered_web_search": final["crag_triggered_web_search"],
         }
+        # NEW — persist for resume feature
+        chat_store.create_session_if_missing(thread_id, repo_url, github_user, question)
+        chat_store.save_turn(thread_id, question, result)
+        return result
     except Exception as e:
         log.error("CRAG graph error: %s", e, exc_info=True)
         return {

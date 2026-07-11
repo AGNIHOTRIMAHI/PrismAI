@@ -6,12 +6,20 @@ Reads repo context from session state set by the main dashboard.
 import uuid
 import requests
 import streamlit as st
+from datetime import datetime
+
+def format_ts(epoch) -> str:
+    try:
+        return datetime.fromtimestamp(epoch).strftime("%b %d, %I:%M %p")
+    except Exception:
+        return ""
+
 
 st.set_page_config(
     page_title="PrismAI · Repo Chat",
     page_icon="💬",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    initial_sidebar_state="expanded",
 )
 
 # ── Pull theme + repo context from session state ─────────────────────────────
@@ -35,6 +43,69 @@ if "chat_history" not in st.session_state:
 if "chat_thread_id" not in st.session_state:
     st.session_state.chat_thread_id = str(uuid.uuid4())
 
+
+# ── Fetch and offer previous conversations for this repo ────────────────────
+
+# ── Sidebar: chat controls ───────────────────────────────────────────────────
+with st.sidebar:
+    st.markdown("### 💬 Chats")
+
+    github_user = st.session_state.get("github_user", {})
+    github_login = github_user.get("login") if isinstance(github_user, dict) else None
+
+    _debug_error = None
+    if repo_url:
+        try:
+            threads_resp = requests.get(
+                f"{BACKEND_URL}/chat/threads",
+                params={"repo_url": repo_url, "github_user": github_login},
+                timeout=10,
+            )
+            past_threads = threads_resp.json() if threads_resp.status_code == 200 else []
+        except Exception as e:
+            past_threads = []
+            _debug_error = e
+    else:
+        past_threads = []
+
+    if past_threads:
+        options = {"— Start new chat —": None}
+        for t in past_threads:
+            short_title = t['title'][:28] + "…" if len(t['title']) > 28 else t['title']
+            options[f"{short_title} · {format_ts(t.get('updated_at'))}"] = t["thread_id"]
+
+        chosen_label = st.selectbox("Resume a previous chat", list(options.keys()), key="resume_picker")
+        chosen_thread_id = options[chosen_label]
+
+        if chosen_thread_id and chosen_thread_id != st.session_state.chat_thread_id:
+            try:
+                hist_resp = requests.get(f"{BACKEND_URL}/chat/history/{chosen_thread_id}", timeout=10)
+                if hist_resp.status_code == 200:
+                    st.session_state.chat_history = hist_resp.json()
+                    st.session_state.chat_thread_id = chosen_thread_id
+                    st.rerun()
+            except Exception as e:
+                st.warning(f"Couldn't load that chat: {e}")
+
+    if st.button("+ New", use_container_width=True):
+        st.session_state.chat_history = []
+        st.session_state.chat_thread_id = str(uuid.uuid4())
+        st.rerun()
+
+    if st.button("🗑 Clear", use_container_width=True, key="clear_btn"):
+        st.session_state.chat_history = []
+        st.session_state.chat_thread_id = str(uuid.uuid4())
+        st.rerun()
+
+    with st.expander("Debug Info"):
+        st.json(past_threads)
+        if _debug_error:
+            st.write("exception:", _debug_error)
+
+
+
+
+
 # ── CSS ───────────────────────────────────────────────────────────────────────
 st.markdown(f"""
 <style>
@@ -45,8 +116,32 @@ st.markdown(f"""
     color: {text_color};
 }}
 
-/* Hide default streamlit header/footer */
-#MainMenu, footer, header {{ visibility: hidden; }}
+
+
+/* Hide only the specific menu (⋮) and Deploy button icons inside the
+   toolbar — do NOT hide the whole toolbar, since the sidebar's
+   expand/collapse control can live inside it depending on version. */
+#MainMenu, footer {{ visibility: hidden; }}
+header[data-testid="stHeader"] {{ background: transparent; }}
+[data-testid="stAppDeployButton"] {{ display: none !important; }}
+
+/* Match ANY element whose data-testid contains "ollaps" (covers
+   stSidebarCollapsedControl, collapsedControl, stSidebarCollapseButton,
+   etc. across Streamlit versions) and force it visible + on top. */
+[data-testid*="ollaps" i] {{
+    visibility: visible !important;
+    display: flex !important;
+    opacity: 1 !important;
+    position: fixed !important;
+    top: 12px !important;
+    left: 12px !important;
+    z-index: 999999 !important;
+    background: {panel_bg} !important;
+    border: 1px solid {border_color} !important;
+    border-radius: 8px !important;
+}}
+
+
 
 .chat-page-header {{
     display: flex;
@@ -179,6 +274,7 @@ def ask_backend(question: str) -> dict:
                 ],
                 "github_token": github_token or None,
                 "thread_id": st.session_state.chat_thread_id,
+                "github_user": github_login,
             },
             timeout=90,
         )
@@ -190,8 +286,10 @@ def ask_backend(question: str) -> dict:
         return {"answer": f"❌ Error: {e}", "sources": [], "crag_relevance_score": 0, "crag_triggered_web_search": False}
     
 
+
+
 # ── Header ────────────────────────────────────────────────────────────────────
-back_col, title_col, clear_col = st.columns([1, 8, 1])
+back_col, title_col = st.columns([1, 9])
 
 with back_col:
     if st.button("← Back", key="back_btn"):
@@ -212,11 +310,6 @@ with title_col:
     </div>
     """, unsafe_allow_html=True)
 
-with clear_col:
-    if st.button("🗑 Clear", key="clear_btn"):
-        st.session_state.chat_history = []
-        st.session_state.chat_thread_id = str(uuid.uuid4())
-        st.rerun()
 
 # ── Suggested questions ───────────────────────────────────────────────────────
 if not st.session_state.chat_history:
@@ -243,56 +336,33 @@ if not st.session_state.chat_history:
                 st.session_state.chat_history.append([q, result])
                 st.rerun()
 
+
 # ── Chat messages ─────────────────────────────────────────────────────────────
 for user_msg, bot_data in st.session_state.chat_history:
-    # User bubble
-    st.markdown(f"""
-    <div class="msg-wrap-user">
-        <div class="bubble-user">{user_msg}</div>
-    </div>
-    """, unsafe_allow_html=True)
+    with st.chat_message("user"):
+        st.markdown(user_msg)
 
-    # Bot bubble
-    if isinstance(bot_data, dict):
-        # answer  = bot_data.get("answer", "")
-        import html as _html
-        answer_raw = bot_data.get("answer", "")
-        # Escape only if it looks like plain text (errors), not intentional HTML
-        answer = answer_raw if answer_raw.strip().startswith("<") is False else _html.escape(answer_raw)
-        # Actually simpler — always escape the answer since badge/src HTML is built separately:
-        answer = _html.escape(answer_raw)
+    with st.chat_message("assistant"):
+        if isinstance(bot_data, dict):
+            answer  = bot_data.get("answer", "")
+            sources = bot_data.get("sources", [])
+            web     = bot_data.get("crag_triggered_web_search", False)
+            score   = bot_data.get("crag_relevance_score", 0)
 
-        sources = bot_data.get("sources", [])
-        web     = bot_data.get("crag_triggered_web_search", False)
-        score   = bot_data.get("crag_relevance_score", 0)
+            st.markdown(answer)
 
-        badge = (
-            '<span class="crag-badge-web">🌐 Web-augmented</span>'
-            if web else
-            f'<span class="crag-badge-repo">📁 Repo context · {score:.0%} relevance</span>'
-        )
-        src_html = ""
-        if sources:
-            src_html = '<div class="sources-line">📎 ' + " · ".join(f"<code>{s}</code>" for s in sources[:5]) + "</div>"
+            if sources:
+                st.caption("📎 " + " · ".join(f"`{s}`" for s in sources[:5]))
 
-        st.markdown(f"""
-        <div class="msg-wrap-bot">
-            <div class="bubble-bot">
-                {answer}
-                {src_html}
-                {badge}
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <div class="msg-wrap-bot">
-            <div class="bubble-bot">{bot_data}</div>
-        </div>
-        """, unsafe_allow_html=True)
+            if web:
+                st.markdown('<span class="crag-badge-web">🌐 Web-augmented</span>', unsafe_allow_html=True)
+            else:
+                st.markdown(f'<span class="crag-badge-repo">📁 Repo context · {score:.0%} relevance</span>', unsafe_allow_html=True)
+        else:
+            st.markdown(str(bot_data))
 
-# Add some padding so the last message isn't hidden behind the input bar
-st.markdown("<div style='height:80px'></div>", unsafe_allow_html=True)
+
+
 
 # ── Native Input bar (Automatically Pinned to Bottom) ────────────────────────
 if prompt := st.chat_input("Ask anything about this repo..."):
