@@ -26,6 +26,9 @@ from tools.vector_store import get_knowledge_base
 from tools.web_search import get_web_search_tool
 from utils.logger import get_logger
 
+import os
+GOOGLE_API_KEY_CRAG = os.getenv("GOOGLE_API_KEY_CRAG") or os.getenv("GOOGLE_API_KEY")
+
 log = get_logger("crag_node")
 
 _RELEVANCE_THRESHOLD = 0.55
@@ -72,7 +75,7 @@ def crag_node(state: PRReviewState) -> PRReviewState:
 
     llm = ChatGoogleGenerativeAI(
         model=settings.google_model,
-        google_api_key=settings.google_api_key,
+        google_api_key=GOOGLE_API_KEY_CRAG,
         temperature=0.0,  # deterministic grading
     )
 

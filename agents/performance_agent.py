@@ -19,6 +19,11 @@ from prompts import PERFORMANCE_PROMPT
 from state import Finding, PRReviewState
 from utils.logger import get_logger
 
+import os
+GOOGLE_API_KEY_PERFORMANCE = os.getenv("GOOGLE_API_KEY_PERFORMANCE") or os.getenv("GOOGLE_API_KEY")
+
+
+
 log = get_logger("performance_agent")
 
 _PERF_PATTERNS = [
@@ -78,7 +83,7 @@ def performance_agent_node(state: PRReviewState) -> PRReviewState:
     # ── LLM Deep Analysis (Gemini) ────────────────────────────────────────────
     llm = ChatGoogleGenerativeAI(
         model=settings.google_model,
-        google_api_key=settings.google_api_key,
+        google_api_key=GOOGLE_API_KEY_PERFORMANCE,
         temperature=settings.google_temperature,
     )
 

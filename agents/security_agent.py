@@ -19,6 +19,9 @@ from prompts import SECURITY_PROMPT
 from state import Finding, PRReviewState
 from utils.logger import get_logger
 
+import os
+GOOGLE_API_KEY_SECURITY = os.getenv("GOOGLE_API_KEY_SECURITY") or os.getenv("GOOGLE_API_KEY")
+
 log = get_logger("security_agent")
 
 _SECRET_PATTERNS = [
@@ -82,7 +85,7 @@ def security_agent_node(state: PRReviewState) -> PRReviewState:
     # ── LLM Deep Analysis (Gemini) ────────────────────────────────────────────
     llm = ChatGoogleGenerativeAI(
         model=settings.google_model,
-        google_api_key=settings.google_api_key,
+        google_api_key=GOOGLE_API_KEY_SECURITY,
         temperature=settings.google_temperature,
     )
 
