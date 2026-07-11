@@ -9,3 +9,8 @@ prism_memory.sqlite-shm
 prism_memory.sqlite-wal
 *.sqlite-shm
 *.sqlite-wal
+
+data/
+*.db
+*.db-shm
+*.db-wal
