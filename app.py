@@ -184,6 +184,50 @@ st.markdown(f"""
         background:{panel_bg}; border:1px solid {border_color};
         font-family:'Courier New',monospace; font-size:13px;
     }}
+    /* ── PRIMARY BUTTON (Connect) ── */
+    button[data-testid="stBaseButton-primary"] {{
+        background-color: {btn_bg} !important; 
+        color: #fff !important;
+        border: none !important; 
+        font-weight: 600 !important;
+        border-radius: 6px !important;      /* Rounded corners */
+        height: 42px !important;            /* Match the height of the input fields */
+        padding: 0 24px !important;
+        letter-spacing: 0.5px !important;
+        transition: all 0.2s ease-in-out !important;
+    }}
+    
+    button[data-testid="stBaseButton-primary"]:hover {{
+        background-color: {btn_hover} !important; 
+        box-shadow: 0 0 12px {shadow_color} !important;
+        transform: translateY(-1px) !important;
+    }}
+    div[class*="st-key-connect_btn"] button {{
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 14px !important;
+    
+}}
+div[class*="st-key-connect_btn"] button p {{
+    display: flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+    margin: 0 !important;
+}}
+div[class*="st-key-connect_btn"] button p::before {{
+    content: "";
+    display: inline-block;
+    width: 22px; height: 22px;
+    
+    background: linear-gradient(135deg, #fbbf24, #ffffff) !important;
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    -webkit-mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'><path d='M 41 2 C 37.145849 2 34 5.1458524 34 9 C 34 10.826601 34.744732 12.463949 35.898438 13.712891 L 27.525391 24 L 15.796875 24 C 15.290259 20.637238 12.499758 18 9 18 C 5.1458495 18 2 21.145852 2 25 C 2 28.854148 5.1458495 32 9 32 C 12.499758 32 15.290259 29.362762 15.796875 26 L 27.5 26 L 35.585938 36.75 C 34.648895 37.940917 34 39.373764 34 41 C 34 44.854148 37.145849 48 41 48 C 44.854151 48 48 44.854148 48 41 C 48 37.145852 44.854151 34 41 34 C 39.506497 34 38.19559 34.575979 37.056641 35.378906 L 29.269531 25.023438 L 37.498047 14.917969 C 38.544765 15.542597 39.697338 16 41 16 C 44.854151 16 48 12.854148 48 9 C 48 5.1458524 44.854151 2 41 2 z M 41 4 C 43.773271 4 46 6.2267307 46 9 C 46 11.773269 43.773271 14 41 14 C 38.226729 14 36 11.773269 36 9 C 36 6.2267307 38.226729 4 41 4 z M 9 20 C 11.773271 20 14 22.226731 14 25 C 14 27.773269 11.773271 30 9 30 C 6.226729 30 4 27.773269 4 25 C 4 22.226731 6.226729 20 9 20 z M 41 36 C 43.773271 36 46 38.226731 46 41 C 46 43.773269 43.773271 46 41 46 C 38.226729 46 36 43.773269 36 41 C 36 38.226731 38.226729 36 41 36 z'/></svg>");
+    mask-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 50 50'><path d='M 41 2 C 37.145849 2 34 5.1458524 34 9 C 34 10.826601 34.744732 12.463949 35.898438 13.712891 L 27.525391 24 L 15.796875 24 C 15.290259 20.637238 12.499758 18 9 18 C 5.1458495 18 2 21.145852 2 25 C 2 28.854148 5.1458495 32 9 32 C 12.499758 32 15.290259 29.362762 15.796875 26 L 27.5 26 L 35.585938 36.75 C 34.648895 37.940917 34 39.373764 34 41 C 34 44.854148 37.145849 48 41 48 C 44.854151 48 48 44.854148 48 41 C 48 37.145852 44.854151 34 41 34 C 39.506497 34 38.19559 34.575979 37.056641 35.378906 L 29.269531 25.023438 L 37.498047 14.917969 C 38.544765 15.542597 39.697338 16 41 16 C 44.854151 16 48 12.854148 48 9 C 48 5.1458524 44.854151 2 41 2 z M 41 4 C 43.773271 4 46 6.2267307 46 9 C 46 11.773269 43.773271 14 41 14 C 38.226729 14 36 11.773269 36 9 C 36 6.2267307 38.226729 4 41 4 z M 9 20 C 11.773271 20 14 22.226731 14 25 C 14 27.773269 11.773271 30 9 30 C 6.226729 30 4 27.773269 4 25 C 4 22.226731 6.226729 20 9 20 z M 41 36 C 43.773271 36 46 38.226731 46 41 C 46 43.773269 43.773271 46 41 46 C 38.226729 46 36 43.773269 36 41 C 36 38.226731 38.226729 36 41 36 z'/></svg>");
+}}
 </style>
 """, unsafe_allow_html=True)
 
@@ -516,11 +560,20 @@ render_pending_approvals()
 # -----------------------------------------------------------------------------
 # 8. INPUT FORM
 # -----------------------------------------------------------------------------
-tab1, tab2 = st.tabs(["🔍 Single PR Review", "⚡ Automated Webhooks"])
+tab1, tab2 = st.tabs([" Single PR Review", " Automated Webhooks"])
 
 # --- TAB 1: SINGLE PR REVIEW ---
 with tab1:
-    st.markdown("### Review an Individual Pull Request")
+    #st.markdown("#### Review an Individual Pull Request")
+    
+    st.markdown(f"""
+<h3 style="display:flex;align-items:center;gap:10px;color:{text_color};margin:0;">
+<svg width="25" height="25" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+<path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+</svg>
+Review an Individual Pull Request
+</h3>
+""", unsafe_allow_html=True)
     with st.container(border=True):
         col1, col2 = st.columns([4, 1])
         with col1:
@@ -530,7 +583,7 @@ with tab1:
                 label_visibility="collapsed",
             )
         with col2:
-            st.write("") # Alignment spacing
+            #st.write("") # Alignment spacing
             if st.button("🚀 Run Graph", use_container_width=True, type="primary"):
                 st.session_state.thread_id          = str(uuid.uuid4())
                 st.session_state.graph_state        = {}
@@ -553,14 +606,29 @@ with tab1:
 
 # --- TAB 2: CONNECT REPO (Webhook & HITL Email) ---
 with tab2:
-    st.markdown("### 🔗 Connect Repository for Auto-Review")
+    #st.markdown("### 🔗 Connect Repository for Auto-Review")
+    st.markdown(f"""
+    <h3 style="display:flex;align-items:center;gap:10px;color:{text_color};">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+        Connect Repository for Auto-Review
+    </h3>
+    """, unsafe_allow_html=True)
     st.caption(
         "Once connected, every new or updated PR on this repo automatically runs "
         "through the pipeline — no need to paste links. You'll see it appear under "
         "**pending approvals** above when it reaches the HITL gate."
     )
     with st.container(border=True):
-        col_a, col_b = st.columns(2)
+        #col_a, col_b = st.columns(2)
+        col_a, col_b, col_c = st.columns([4, 4, 2], vertical_alignment="bottom")
+        #with col_a:
+         #   new_repo = st.text_input("Repository", placeholder="ABC/PrismAI", key="connect_repo_input")
+        #with col_b:
+         #   notify_email_input = st.text_input(
+          #      "Notify Email (for HITL alerts)",
+           #     placeholder="prismai@example.com",
+            #    key="connect_notify_email",
+            #)
         with col_a:
             new_repo = st.text_input("Repository", placeholder="ABC/PrismAI", key="connect_repo_input")
         with col_b:
@@ -569,10 +637,15 @@ with tab2:
                 placeholder="prismai@example.com",
                 key="connect_notify_email",
             )
+        with col_c:
+            # 2. Place the button in the third column
+            #connect_clicked = st.button("Connect", type="primary", use_container_width=True)
+            #connect_clicked = st.button("Connect", type="primary", use_container_width=True)
+            connect_clicked = st.button("Connect", type="primary", use_container_width=True, key="connect_btn")
+        #st.markdown("<br>", unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        if st.button("🔌 Connect Repository", use_container_width=True):
+        #if st.button("🔌 Connect Repository", use_container_width=True):
+        if connect_clicked:
             if not user_token:
                 st.error("❌ Authentication Missing: Please provide your GitHub Token in the sidebar.")
             else:
@@ -633,6 +706,7 @@ with tab2:
 
     # --- Connected repos list, with disconnect ---
     st.markdown("#### Connected Repositories")
+    
     try:
         repos_res = requests.get(f"{BACKEND_URL}/repos", timeout=5)
         connected_repos = repos_res.json().get("repos", []) if repos_res.status_code == 200 else []
