@@ -623,8 +623,8 @@ div[data-testid="stLinkButton"] {{ margin: 4px 0 !important; }}
     scroll-behavior: smooth;
 }}
 .see-action-btn:hover {{
-    background: {btn_bg} !important;
-    color: #041235 !important;
+    
+    
     transform: translateY(-4px) scale(1.02);
     box-shadow: 0 12px 25px {shadow_color};
 }}
@@ -684,6 +684,7 @@ html {{ scroll-behavior: smooth; }}
             text-decoration: none !important; box-shadow: 0 4px 15px {shadow_color} !important;
             border: none !important; display: inline-flex !important;
             align-items: center !important; gap: 12px !important; transition: all 0.25s ease;
+            justify-content: center !important;
         }}
         div[data-testid="stLinkButton"] a p {{
         font-weight: 700 !important; font-size: clamp(0.95rem, 1.8vw, 1.25rem) !important;
