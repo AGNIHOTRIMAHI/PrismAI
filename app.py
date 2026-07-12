@@ -14,7 +14,7 @@ load_dotenv()
 # -----------------------------------------------------------------------------
 # 1. PAGE CONFIGURATION
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="PrismAI", page_icon="🟪", layout="wide")
+st.set_page_config(page_title="PrismAI", page_icon="🟦", layout="wide")
 
 if "light_mode" not in st.session_state:
     st.session_state.light_mode = False
@@ -22,14 +22,22 @@ if "light_mode" not in st.session_state:
 # -----------------------------------------------------------------------------
 # 2. DYNAMIC CSS
 # -----------------------------------------------------------------------------
+#if st.session_state.light_mode:
+#    bg_color     = "#f7f2fc";  text_color   = "#401371";  panel_bg     = "#ffffff"
+#    border_color = "#cfa1ed";  shadow_color = "rgba(157,78,221,0.2)"
+#    title_color  = "#552E7E";  btn_bg       = "#7b2cbf";  btn_hover    = "#9d4edd"
+#else:
+#    bg_color     = "#080212";  text_color   = "#e4e4e7";  panel_bg     = "#250a47"
+#   border_color = "#54199c";  shadow_color = "rgba(157,78,221,0.7)"
+#    title_color  = "#f4f4f5";  btn_bg       = "#9d4edd";  btn_hover    = "#b5179e"
 if st.session_state.light_mode:
-    bg_color     = "#f7f2fc";  text_color   = "#401371";  panel_bg     = "#ffffff"
-    border_color = "#cfa1ed";  shadow_color = "rgba(157,78,221,0.2)"
-    title_color  = "#552E7E";  btn_bg       = "#7b2cbf";  btn_hover    = "#9d4edd"
+    bg_color     = "#eef2fc";  text_color   = "#1b2a63";  panel_bg     = "#ffffff"
+    border_color = "#b9c6f2";  shadow_color = "rgba(91,111,216,0.25)"
+    title_color  = "#16225a";  btn_bg       = "#5b6fd8";  btn_hover    = "#7c8ff0"
 else:
-    bg_color     = "#080212";  text_color   = "#e4e4e7";  panel_bg     = "#250a47"
-    border_color = "#54199c";  shadow_color = "rgba(157,78,221,0.7)"
-    title_color  = "#f4f4f5";  btn_bg       = "#9d4edd";  btn_hover    = "#b5179e"
+    bg_color     = "#050f2c";  text_color   = "#dbe4fb";  panel_bg     = "#0e1f52"
+    border_color = "#3a4f9c";  shadow_color = "rgba(124,143,240,0.5)"
+    title_color  = "#ffffff";  btn_bg       = "#5b6fd8";  btn_hover    = "#7c8ff0"
 
 st.markdown(f"""
 <style>
@@ -39,7 +47,7 @@ st.markdown(f"""
         color:{title_color} !important; line-height:1 !important;
         margin:0 !important; padding:0 !important; letter-spacing:1px !important;
     }}
-    .stApp {{ background-color:{bg_color}; color:{text_color}; }}
+    .stApp {{ background-color:transparent !important; color:{text_color}; }}
     h2,h3,p,span,div {{ color:{text_color} !important; }}
     h2,h3 {{ font-family:'Courier New',monospace; }}
     .stTextInput>div, div[data-baseweb="input"], div[data-baseweb="base-input"] {{
