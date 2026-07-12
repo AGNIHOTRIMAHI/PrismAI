@@ -425,6 +425,7 @@ div[data-testid="stLinkButton"] {{ margin: 4px 0 !important; }}
     font-family: 'Kavoon', cursive !important; font-size: clamp(2rem, 5vw, 3.8rem) !important;
     background: linear-gradient(100deg, {title_color} 0%, {btn_bg} 45%, {lavender} 80%, {title_color} 100%);
     background-size: 220% auto;
+    padding: 0 !important;
     -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     margin: 0 0 5px 0!important; line-height: 1.1; letter-spacing: 1px;
     animation: textShimmer 7s ease-in-out infinite;
@@ -711,11 +712,7 @@ html {{ scroll-behavior: smooth; }}
         # capabilities grid further down — which is why those boxes looked like
         # they had almost no space between them. Removed; the default "small"
         # column gap below is enough for these two buttons.
-        st.markdown("""
-        <style>
-        .st-key-hero_btn_row [data-testid="stHorizontalBlock"] { gap: 0.3rem !important; }
-        </style>
-        """, unsafe_allow_html=True)
+        
         with st.container(key="hero_btn_row"):
             btn_col1, btn_col2 = st.columns([1, 1], gap="small")
             with btn_col1:
