@@ -693,12 +693,16 @@ html {{ scroll-behavior: smooth; }}
         div[data-testid="stLinkButton"] a:hover {{
             filter: brightness(1.08) !important; transform: translateY(-4px) scale(1.02) !important;
             box-shadow: 0 12px 25px {shadow_color} !important;
+             min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }}
         div[data-testid="stLinkButton"] a:active {{
             transform: translateY(2px) scale(0.98) !important; box-shadow: 0 4px 10px {shadow_color} !important;
             filter: brightness(1.0) !important; transition: all 0.1s ease-out !important;
         }}
         div[data-testid="stLinkButton"] a p::before {{
+            flex-shrink: 0 !important;
             content: ""; display: inline-block; width: 26px; height: 26px; margin-right: 4px;
             vertical-align: middle; background-color: #041235;
             -webkit-mask-repeat: no-repeat; mask-repeat: no-repeat;
