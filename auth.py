@@ -676,6 +676,7 @@ html {{ scroll-behavior: smooth; }}
 
         st.markdown(f"""
         <style>
+        
         div[data-testid="stLinkButton"] a {{
             background: {btn_bg} !important; color: #041235 !important;
             font-weight: 600 !important; font-size: 1.5rem !important;
@@ -685,8 +686,9 @@ html {{ scroll-behavior: smooth; }}
             align-items: center !important; gap: 12px !important; transition: all 0.25s ease;
         }}
         div[data-testid="stLinkButton"] a p {{
-            font-weight: 700 !important; font-size: 1.25rem !important;
-            margin: 0 !important; display: flex !important; align-items: center !important; gap: 12px !important;
+        font-weight: 700 !important; font-size: clamp(0.95rem, 1.8vw, 1.25rem) !important;
+        margin: 0 !important; display: flex !important; align-items: center !important; gap: 12px !important;
+        white-space: nowrap !important;
         }}
         div[data-testid="stLinkButton"] a:hover {{
             filter: brightness(1.08) !important; transform: translateY(-4px) scale(1.02) !important;
