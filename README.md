@@ -64,6 +64,10 @@ GitHub PR URL
 
 ---
 
+
+
+![PrismAI Architecture](architecture.png)
+
 ## 🚀 Getting Started
 
 ### Prerequisites
